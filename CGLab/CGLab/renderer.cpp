@@ -1,6 +1,8 @@
 #include "renderer.h"
 
 #include <d3d11.h>
+#include <d3d11_1.h>
+
 #include <dxgi.h>
 #include <DirectXMath.h>
 
@@ -67,6 +69,11 @@ Renderer::Renderer()
 	, m_pShaderCompiler(nullptr)
 	, m_startTime(0)
 	, m_currentTime(0)
+#ifdef _DEBUG
+	, m_isDebug(true)
+#else
+	, m_isDebug(false)
+#endif 
 {}
 
 Renderer::~Renderer()
@@ -110,6 +117,8 @@ bool Renderer::Init(HWND hWnd)
 		Release();
 	}
 
+
+
 	SafeRelease(pFactory);
 
 	return SUCCEEDED(hr);
@@ -131,11 +140,23 @@ void Renderer::Release()
 	SafeRelease(m_pBackBufferRTV);
 	SafeRelease(m_pSwapChain);
 	SafeRelease(m_pContext);
-	SafeRelease(m_pDevice);
+	SafeRelease(m_pAnnotation);
 
 	if (m_pShaderCompiler != nullptr)
 	{
 		delete m_pShaderCompiler;
+	}
+
+	if (m_isDebug) {
+		ID3D11Debug* pDebug = nullptr;
+		m_pDevice->QueryInterface(IID_PPV_ARGS(&pDebug));
+		if (pDebug) {
+			UINT references = m_pDevice->Release();
+			if (references > 1) {
+				pDebug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+			}
+			SafeRelease(pDebug);
+		}
 	}
 }
 
@@ -170,11 +191,13 @@ HRESULT Renderer::CreateDevice(IDXGIFactory* pFactory)
 	{
 		D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0 };
 
+		UINT flags = m_isDebug ? D3D11_CREATE_DEVICE_DEBUG : 0;
+
 		hr = D3D11CreateDevice(
 			pAdapter,
 			D3D_DRIVER_TYPE_UNKNOWN,
 			nullptr,
-			D3D11_CREATE_DEVICE_DEBUG,
+			flags,
 			levels,
 			1,
 			D3D11_SDK_VERSION,
@@ -182,6 +205,31 @@ HRESULT Renderer::CreateDevice(IDXGIFactory* pFactory)
 			nullptr,
 			&m_pContext
 		);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pContext->QueryInterface(IID_PPV_ARGS(&m_pAnnotation));
+	}
+
+	ID3D11Debug* pDebug = nullptr;
+
+	if (SUCCEEDED(hr))
+	{
+		ID3D11Debug* pDebug = nullptr;
+		hr = m_pDevice->QueryInterface(IID_PPV_ARGS(&pDebug));
+
+		/*if (SUCCEEDED(hr))
+		{
+			ID3D11InfoQueue* pInfoQueue = nullptr;
+			hr = pDebug->QueryInterface(IID_PPV_ARGS(&pInfoQueue));
+
+			///
+		
+			SafeRelease(pInfoQueue);
+		}*/
+
+		SafeRelease(pDebug);
 	}
 
 	SafeRelease(pAdapter);
@@ -301,7 +349,8 @@ HRESULT Renderer::CreatePipelineStateObjects()
 			"shaders/simpleShader.hlsl",
 			&m_pVertexShader,
 			&pVSBlob,
-			&m_pPixelShader
+			&m_pPixelShader,
+			m_isDebug
 		))
 		{
 			hr = E_FAIL;
@@ -385,14 +434,28 @@ HRESULT Renderer::CreateSceneResources()
 		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pIndexBuffer);
 	}
 
+
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
 		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pConstantBuffer);
 	}
+	if (SUCCEEDED(hr)) 
+	{
+		hr = SetResourceName(m_pConstantBuffer, "Const Buffer");
+	}
 
-	return S_OK;
+	return hr;
+}
+
+HRESULT Renderer::SetResourceName(ID3D11Resource* pResource, const std::string& name)
+{
+	if (!pResource) 
+	{
+		return E_FAIL;
+	}
+	return pResource->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)name.size(), name.c_str());
 }
 
 
@@ -457,6 +520,8 @@ void Renderer::Render()
 {
 	Update();
 
+	m_pAnnotation->BeginEvent(L"DrawCube");
+
 	m_pContext->ClearState();
 
 	m_pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
@@ -483,6 +548,8 @@ void Renderer::Render()
 	m_pContext->RSSetScissorRects(1, &rect);
 
 	RenderScene();
+
+	m_pAnnotation->EndEvent();
 
 	m_pSwapChain->Present(0, 0);
 }

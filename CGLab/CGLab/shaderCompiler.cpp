@@ -18,8 +18,9 @@ ShaderCompiler::~ShaderCompiler()
 bool ShaderCompiler::CreateVertexAndPixelShaders(
 	const char* shaderFileName,
 	ID3D11VertexShader** ppVS,
-	ID3DBlob** ppVSBinaryBlob,
-	ID3D11PixelShader** ppPS
+	ID3D10Blob** ppVSBinaryBlob,
+	ID3D11PixelShader** ppPS,
+	bool isDebug
 )
 {
 	FILE* pFile = nullptr;
@@ -48,8 +49,10 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	fclose(pFile);
 
 	ID3DBlob* pErrors = nullptr;
+	
+	UINT flags = isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
 
-	HRESULT hr = D3DCompile(shaderSource, fileSize, shaderFileName, nullptr, nullptr, "VS", "vs_5_0", 0, 0, ppVSBinaryBlob, &pErrors);
+	HRESULT hr = D3DCompile(shaderSource, fileSize, shaderFileName, nullptr, nullptr, "VS", "vs_5_0", flags, 0, ppVSBinaryBlob, &pErrors);
 
 	if (SUCCEEDED(hr))
 	{
@@ -71,7 +74,7 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	{
 		ID3DBlob* pBlob = nullptr;
 
-		hr = D3DCompile(shaderSource, fileSize, shaderFileName, nullptr, nullptr, "PS", "ps_5_0", 0, 0, &pBlob, &pErrors);
+		hr = D3DCompile(shaderSource, fileSize, shaderFileName, nullptr, nullptr, "PS", "ps_5_0", flags, 0, &pBlob, &pErrors);
 
 		if (SUCCEEDED(hr))
 		{

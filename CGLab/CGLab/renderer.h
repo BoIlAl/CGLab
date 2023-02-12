@@ -15,6 +15,8 @@ struct ID3D11Buffer;
 struct ID3D11VertexShader;
 struct ID3D11PixelShader;
 struct ID3D11InputLayout;
+struct ID3DUserDefinedAnnotation;
+struct ID3D11Resource;
 
 class ShaderCompiler;
 
@@ -42,6 +44,7 @@ private:
 	HRESULT CreateBackBuffer();
 	HRESULT CreatePipelineStateObjects();
 	HRESULT CreateSceneResources();
+	HRESULT SetResourceName(ID3D11Resource* pResource, const std::string& name);
 
 	void Update();
 	void RenderScene();
@@ -84,7 +87,11 @@ private:
 
 	ShaderCompiler* m_pShaderCompiler;
 
+	ID3DUserDefinedAnnotation* m_pAnnotation;
+
 	size_t m_startTime;
 	size_t m_currentTime;
+
+	bool m_isDebug;
 };
 
