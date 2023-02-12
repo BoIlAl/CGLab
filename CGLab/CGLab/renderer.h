@@ -7,7 +7,10 @@ struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct IDXGISwapChain;
 struct ID3D11RenderTargetView;
+struct ID3D11DepthStencilView;
 struct ID3D11RasterizerState;
+struct ID3D11DepthStencilState;
+struct ID3D11Texture2D;
 struct ID3D11Buffer;
 struct ID3D11VertexShader;
 struct ID3D11PixelShader;
@@ -27,6 +30,7 @@ public:
 	~Renderer();
 
 	void Render();
+	bool Resize(UINT newWidth, UINT newHeight);
 
 private:
 	Renderer();
@@ -36,16 +40,19 @@ private:
 	HRESULT CreateDevice(IDXGIFactory* pFactory);
 	HRESULT CreateSwapChain(IDXGIFactory* pFactory, HWND hWnd);
 	HRESULT CreateBackBuffer();
-	HRESULT CreateRasterizerState();
+	HRESULT CreatePipelineStateObjects();
 	HRESULT CreateSceneResources();
 
 	void Update();
 	void RenderScene();
 
 private:
+	static constexpr UINT s_swapChainBuffersNum = 2u;
+	static constexpr FLOAT s_PI = 3.14159265359f;
+
 	static constexpr FLOAT s_near = 0.001f;
 	static constexpr FLOAT s_far = 1000.0f;
-	static constexpr FLOAT s_fov = 3.14159265359f * 2.0f / 3.0f;
+	static constexpr FLOAT s_fov = s_PI / 2.0f;
 
 	static constexpr FLOAT s_cameraPosition[3] = { 0.0f, 0.0f, -5.0f };
 
@@ -55,8 +62,11 @@ private:
 
 	IDXGISwapChain* m_pSwapChain;
 	ID3D11RenderTargetView* m_pBackBufferRTV;
+	ID3D11Texture2D* m_pDepthTexture;
+	ID3D11DepthStencilView* m_pDepthTextureDSV;
 
 	ID3D11RasterizerState* m_pRasterizerState;
+	ID3D11DepthStencilState* m_pDepthStencilState;
 
 	ID3D11Buffer* m_pVertexBuffer;
 	ID3D11Buffer* m_pIndexBuffer;
@@ -73,5 +83,8 @@ private:
 	UINT m_windowHeight;
 
 	ShaderCompiler* m_pShaderCompiler;
+
+	size_t m_startTime;
+	size_t m_currentTime;
 };
 

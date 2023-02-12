@@ -1,6 +1,6 @@
 cbuffer ConstantBuffer : register(b0)
 {
-    float4x4 vpMatrix;
+    float4x4 mvpMatrix;
 }
 
 
@@ -21,7 +21,7 @@ struct VSOut
 VSOut VS(VSIn input)
 {
     VSOut output;
-    output.position = mul(float4(input.position, 1.0f), vpMatrix);
+    output.position = mul(float4(input.position, 1.0f), mvpMatrix);
     output.color = input.color;
     
     return output;

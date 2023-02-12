@@ -148,6 +148,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
     {
+    case WM_SIZE:
+        {
+            if (g_pRenderer != nullptr)
+            {
+                if (!g_pRenderer->Resize(LOWORD(lParam), HIWORD(lParam)))
+                {
+                    DestroyWindow(hWnd);
+                }
+            }
+        }
+        break;
+
     case WM_COMMAND:
         {
             int wmId = LOWORD(wParam);
