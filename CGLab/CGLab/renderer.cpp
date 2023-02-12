@@ -147,12 +147,15 @@ void Renderer::Release()
 		delete m_pShaderCompiler;
 	}
 
-	if (m_isDebug) {
+	if (m_isDebug) 
+	{
 		ID3D11Debug* pDebug = nullptr;
-		m_pDevice->QueryInterface(IID_PPV_ARGS(&pDebug));
-		if (pDebug) {
+		HRESULT hr = m_pDevice->QueryInterface(IID_PPV_ARGS(&pDebug));
+		if (SUCCEEDED(hr))
+		{
 			UINT references = m_pDevice->Release();
-			if (references > 1) {
+			if (references > 1) 
+			{
 				pDebug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
 			}
 			SafeRelease(pDebug);
@@ -210,26 +213,6 @@ HRESULT Renderer::CreateDevice(IDXGIFactory* pFactory)
 	if (SUCCEEDED(hr))
 	{
 		hr = m_pContext->QueryInterface(IID_PPV_ARGS(&m_pAnnotation));
-	}
-
-	ID3D11Debug* pDebug = nullptr;
-
-	if (SUCCEEDED(hr))
-	{
-		ID3D11Debug* pDebug = nullptr;
-		hr = m_pDevice->QueryInterface(IID_PPV_ARGS(&pDebug));
-
-		/*if (SUCCEEDED(hr))
-		{
-			ID3D11InfoQueue* pInfoQueue = nullptr;
-			hr = pDebug->QueryInterface(IID_PPV_ARGS(&pInfoQueue));
-
-			///
-		
-			SafeRelease(pInfoQueue);
-		}*/
-
-		SafeRelease(pDebug);
 	}
 
 	SafeRelease(pAdapter);
@@ -359,7 +342,8 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
+		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = 
+		{
 			CreateInputElementDesc("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0),
 			CreateInputElementDesc("COLOR", DXGI_FORMAT_R32G32B32A32_FLOAT, sizeof(DirectX::XMFLOAT3))
 		};
