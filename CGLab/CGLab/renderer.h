@@ -1,6 +1,7 @@
 #pragma once
 
 #include "framework.h"
+#include "light.h"
 
 struct IDXGIFactory;
 struct ID3D11Device;
@@ -52,6 +53,8 @@ private:
 	void RenderScene();
 	void PostProcessing();
 
+	void FillLightBuffer();
+
 private:
 	static constexpr UINT s_swapChainBuffersNum = 2u;
 	static constexpr FLOAT s_PI = 3.14159265359f;
@@ -83,6 +86,7 @@ private:
 	UINT m_indexCount;
 
 	ID3D11Buffer* m_pConstantBuffer;
+	ID3D11Buffer* m_pLightBuffer;
 
 	ID3D11VertexShader* m_pVertexShader;
 	ID3D11PixelShader* m_pPixelShader;
@@ -103,5 +107,7 @@ private:
 	bool m_isDebug;
 
 	ToneMapping* m_pToneMapping;
+
+	std::vector<PointLight> m_lights;
 };
 

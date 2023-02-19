@@ -44,7 +44,7 @@ ToneMapping::ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext)
 	, m_pToneMappingVS(nullptr)
 	, m_pToneMappingPS(nullptr)
 	, m_pExposureBuffer(nullptr)
-	, m_adaptedExposure(0.0f)
+	, m_adaptedExposure(1.0f)
 {}
 
 ToneMapping::~ToneMapping()
@@ -124,7 +124,7 @@ FLOAT ToneMapping::EyeAdaptation(FLOAT currentExposure, FLOAT deltaTime) const
 
 void ToneMapping::Update(FLOAT currentExposure, FLOAT deltaTime)
 {
-	m_adaptedExposure = EyeAdaptation(1.0f, deltaTime);
+	m_adaptedExposure = EyeAdaptation(currentExposure, deltaTime);
 
 	static ExposureBuffer exposureBuffer = {};
 	exposureBuffer.exposure = { m_adaptedExposure, 0.0f, 0.0f, 0.0f };
@@ -141,7 +141,7 @@ HRESULT ToneMapping::ToneMap(
 	FLOAT deltaTime
 )
 {
-	Update(1.0f, deltaTime);
+	Update(5.0f, deltaTime);
 
 	m_pContext->ClearState();
 

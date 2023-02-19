@@ -14,15 +14,27 @@
 #include "toneMapping.h"
 
 
+static constexpr UINT MaxLightNum = 3;
+
+
 struct Vertex
 {
 	DirectX::XMFLOAT3 position;
 	DirectX::XMFLOAT4 color;
+	DirectX::XMFLOAT3 normal;
 };
+
 
 struct ConstantBuffer
 {
-	DirectX::XMFLOAT4X4 mvpMatrix;
+	DirectX::XMFLOAT4X4 modelMatrix;
+	DirectX::XMFLOAT4X4 vpMatrix;
+};
+
+struct LightBuffer
+{
+	DirectX::XMUINT4 lightsCount; // r
+	PointLight lights[MaxLightNum];
 };
 
 
@@ -66,6 +78,7 @@ Renderer::Renderer()
 	, m_pIndexBuffer(nullptr)
 	, m_indexCount(0)
 	, m_pConstantBuffer(nullptr)
+	, m_pLightBuffer(nullptr)
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
 	, m_pInputLayout(nullptr)
@@ -138,6 +151,7 @@ void Renderer::Release()
 	SafeRelease(m_pVertexShader);
 	SafeRelease(m_pIndexBuffer);
 	SafeRelease(m_pVertexBuffer);
+	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pConstantBuffer);
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerState);
@@ -297,6 +311,33 @@ HRESULT Renderer::CreateBackBuffer()
 
 	SafeRelease(pBackBufferTexture);
 
+	if (SUCCEEDED(hr))
+	{
+		D3D11_TEXTURE2D_DESC hdrTextureDesc = {};
+		hdrTextureDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+		hdrTextureDesc.Width = m_windowWidth;
+		hdrTextureDesc.Height = m_windowHeight;
+		hdrTextureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+		hdrTextureDesc.Usage = D3D11_USAGE_DEFAULT;
+		hdrTextureDesc.CPUAccessFlags = 0;
+		hdrTextureDesc.ArraySize = 1;
+		hdrTextureDesc.MipLevels = 1;
+		hdrTextureDesc.SampleDesc.Count = 1;
+		hdrTextureDesc.SampleDesc.Quality = 0;
+
+		hr = m_pDevice->CreateTexture2D(&hdrTextureDesc, nullptr, &m_pHDRRenderTarget);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pDevice->CreateRenderTargetView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureRTV);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pDevice->CreateShaderResourceView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureSRV);
+	}
+
 	return hr;
 }
 
@@ -352,7 +393,8 @@ HRESULT Renderer::CreatePipelineStateObjects()
 		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = 
 		{
 			CreateInputElementDesc("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0),
-			CreateInputElementDesc("COLOR", DXGI_FORMAT_R32G32B32A32_FLOAT, sizeof(DirectX::XMFLOAT3))
+			CreateInputElementDesc("COLOR", DXGI_FORMAT_R32G32B32A32_FLOAT, sizeof(DirectX::XMFLOAT3)),
+			CreateInputElementDesc("NORMAL", DXGI_FORMAT_R32G32B32_FLOAT, sizeof(DirectX::XMFLOAT3) + sizeof(DirectX::XMFLOAT4))
 		};
 
 		hr = m_pDevice->CreateInputLayout(
@@ -364,68 +406,41 @@ HRESULT Renderer::CreatePipelineStateObjects()
 		);
 	}
 
-	if (SUCCEEDED(hr))
-	{
-		D3D11_TEXTURE2D_DESC hdrTextureDesc = {};
-		hdrTextureDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-		hdrTextureDesc.Width = m_windowWidth;
-		hdrTextureDesc.Height = m_windowHeight;
-		hdrTextureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-		hdrTextureDesc.Usage = D3D11_USAGE_DEFAULT;
-		hdrTextureDesc.CPUAccessFlags = 0;
-		hdrTextureDesc.ArraySize = 1;
-		hdrTextureDesc.MipLevels = 1;
-		hdrTextureDesc.SampleDesc.Count = 1;
-		hdrTextureDesc.SampleDesc.Quality = 0;
-
-		hr = m_pDevice->CreateTexture2D(&hdrTextureDesc, nullptr, &m_pHDRRenderTarget);
-	}
-	
-	if (SUCCEEDED(hr))
-	{
-		hr = m_pDevice->CreateRenderTargetView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureRTV);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		hr = m_pDevice->CreateShaderResourceView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureSRV);
-	}
-
 	return hr;
 }
 
 HRESULT Renderer::CreateSceneResources()
 {
 	static constexpr Vertex vertices[] = {
-		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-		{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f },	{ 0.0f, -1.0f, 0.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
+		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
 
-		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
 
-		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
 
-		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
 
-		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 1.0f, 1.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
 
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } }
+		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } }
 	};
 
 	static constexpr UINT16 indices[] = {
@@ -459,9 +474,30 @@ HRESULT Renderer::CreateSceneResources()
 
 		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pConstantBuffer);
 	}
+
 	if (SUCCEEDED(hr)) 
 	{
 		hr = SetResourceName(m_pConstantBuffer, "Const Buffer");
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		m_lights.push_back(PointLight({ -2.0f, 0.0f, -3.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		m_lights.push_back(PointLight({ 2.0f, 0.0f, -3.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, 1.0f));
+		m_lights.push_back(PointLight({ 0.0f, 2.0f, -3.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, 1.0f));
+
+		LightBuffer lightBuffer = {};
+		lightBuffer.lightsCount.x = (UINT)m_lights.size();
+		memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
+
+		D3D11_SUBRESOURCE_DATA lightBufferData = {};
+		lightBufferData.pSysMem = &lightBuffer;
+		lightBufferData.SysMemPitch = 0;
+		lightBufferData.SysMemSlicePitch = 0;
+
+		hr = m_pDevice->CreateBuffer(&lightBufferDesc, &lightBufferData, &m_pLightBuffer);
 	}
 
 	if (SUCCEEDED(hr))
@@ -497,8 +533,11 @@ bool Renderer::Resize(UINT newWidth, UINT newHeight)
 	SafeRelease(m_pBackBufferRTV);
 	SafeRelease(m_pDepthTextureDSV);
 	SafeRelease(m_pDepthTexture);
+	SafeRelease(m_pHDRRenderTarget);
+	SafeRelease(m_pHDRTextureRTV);
+	SafeRelease(m_pHDRTextureSRV);
 
-	HRESULT hr = m_pSwapChain->ResizeBuffers(s_swapChainBuffersNum, newWidth, newHeight, DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+	HRESULT hr = m_pSwapChain->ResizeBuffers(s_swapChainBuffersNum, newWidth, newHeight, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 0);
 
 	if (SUCCEEDED(hr))
 	{
@@ -509,6 +548,16 @@ bool Renderer::Resize(UINT newWidth, UINT newHeight)
 	}
 
 	return SUCCEEDED(hr);
+}
+
+
+void Renderer::FillLightBuffer()
+{
+	static LightBuffer lightBuffer = {};
+	lightBuffer.lightsCount.x = (UINT)m_lights.size();
+	memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
+
+	m_pContext->UpdateSubresource(m_pLightBuffer, 0, nullptr, &lightBuffer, 0, 0);
 }
 
 
@@ -539,7 +588,8 @@ void Renderer::Update()
 	);
 
 	ConstantBuffer constantBuffer = {};
-	DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelMatrix * viewMatrix * projMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
 
 	m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 }
@@ -605,10 +655,10 @@ void Renderer::RenderScene()
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer };
+	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer };
 
-	m_pContext->VSSetConstantBuffers(0, 1, constantBuffers);
-	m_pContext->PSSetConstantBuffers(0, 1, constantBuffers);
+	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 
 	m_pContext->DrawIndexed(m_indexCount, 0, 0);
 }
