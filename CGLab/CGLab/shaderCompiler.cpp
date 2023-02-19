@@ -7,8 +7,9 @@
 #include "common.h"
 
 
-ShaderCompiler::ShaderCompiler(ID3D11Device* pDevice)
+ShaderCompiler::ShaderCompiler(ID3D11Device* pDevice, bool isDebug)
 	: m_pDevice(pDevice)
+	, m_isDebug(isDebug)
 {}
 
 ShaderCompiler::~ShaderCompiler()
@@ -19,8 +20,7 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	const char* shaderFileName,
 	ID3D11VertexShader** ppVS,
 	ID3D10Blob** ppVSBinaryBlob,
-	ID3D11PixelShader** ppPS,
-	bool isDebug
+	ID3D11PixelShader** ppPS
 )
 {
 	FILE* pFile = nullptr;
@@ -50,7 +50,7 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 
 	ID3DBlob* pErrors = nullptr;
 	
-	UINT flags = isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
+	UINT flags = m_isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
 
 	HRESULT hr = D3DCompile(shaderSource, fileSize, shaderFileName, nullptr, nullptr, "VS", "vs_5_0", flags, 0, ppVSBinaryBlob, &pErrors);
 

@@ -7,6 +7,7 @@ struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct IDXGISwapChain;
 struct ID3D11RenderTargetView;
+struct ID3D11ShaderResourceView;
 struct ID3D11DepthStencilView;
 struct ID3D11RasterizerState;
 struct ID3D11DepthStencilState;
@@ -19,6 +20,7 @@ struct ID3DUserDefinedAnnotation;
 struct ID3D11Resource;
 
 class ShaderCompiler;
+class ToneMapping;
 
 
 class Renderer
@@ -48,6 +50,7 @@ private:
 
 	void Update();
 	void RenderScene();
+	void PostProcessing();
 
 private:
 	static constexpr UINT s_swapChainBuffersNum = 2u;
@@ -67,6 +70,10 @@ private:
 	ID3D11RenderTargetView* m_pBackBufferRTV;
 	ID3D11Texture2D* m_pDepthTexture;
 	ID3D11DepthStencilView* m_pDepthTextureDSV;
+
+	ID3D11Texture2D* m_pHDRRenderTarget;
+	ID3D11RenderTargetView* m_pHDRTextureRTV;
+	ID3D11ShaderResourceView* m_pHDRTextureSRV;
 
 	ID3D11RasterizerState* m_pRasterizerState;
 	ID3D11DepthStencilState* m_pDepthStencilState;
@@ -91,7 +98,10 @@ private:
 
 	size_t m_startTime;
 	size_t m_currentTime;
+	size_t m_timeFromLastFrame;
 
 	bool m_isDebug;
+
+	ToneMapping* m_pToneMapping;
 };
 
