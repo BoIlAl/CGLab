@@ -51,8 +51,6 @@ ToneMapping::ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, U
 	, m_pDownSampleVS(nullptr)
 	, m_pDownSamplePS(nullptr)
 	, m_pExposureDstTexture(nullptr)
-	, m_pExposureTextureSRV(nullptr)
-	, m_pExposureTextureRTV(nullptr)
 {}
 
 ToneMapping::~ToneMapping()
@@ -68,8 +66,16 @@ ToneMapping::~ToneMapping()
 	SafeRelease(m_pDownSampleVS);
 	SafeRelease(m_pDownSamplePS);
 	SafeRelease(m_pExposureDstTexture);
-	SafeRelease(m_pExposureTextureSRV);
-	SafeRelease(m_pExposureTextureRTV);
+
+	for (auto& srv : m_exposureTextureSRVs)
+	{
+		SafeRelease(srv);
+	}
+
+	for (auto& rtv : m_exposureTextureRTVs)
+	{
+		SafeRelease(rtv);
+	}
 }
 
 
@@ -207,7 +213,20 @@ HRESULT ToneMapping::CreateResources()
 		srvDesc.Texture2D.MipLevels = 1;
 		srvDesc.Texture2D.MostDetailedMip = 0;
 
-		hr = m_pDevice->CreateShaderResourceView(m_pExposureTexture, &srvDesc, &m_pExposureTextureSRV);
+		for (UINT i = 0, textureSize = m_textureSize; textureSize > 0; textureSize >>= 1, ++i)
+		{
+			srvDesc.Texture2D.MostDetailedMip = i;
+
+			ID3D11ShaderResourceView* pSrv = nullptr;
+			hr = m_pDevice->CreateShaderResourceView(m_pExposureTexture, &srvDesc, &pSrv);
+
+			if (FAILED(hr))
+			{
+				break;
+			}
+
+			m_exposureTextureSRVs.push_back(pSrv);
+		}
 	}
 
 	if (SUCCEEDED(hr))
@@ -217,7 +236,20 @@ HRESULT ToneMapping::CreateResources()
 		rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 		rtvDesc.Texture2D.MipSlice = 0;
 
-		hr = m_pDevice->CreateRenderTargetView(m_pExposureTexture, &rtvDesc, &m_pExposureTextureRTV);
+		for (UINT i = 0, textureSize = m_textureSize; textureSize > 0; textureSize >>= 1, ++i)
+		{
+			rtvDesc.Texture2D.MipSlice = i;
+
+			ID3D11RenderTargetView* pRtv = nullptr;
+			hr = m_pDevice->CreateRenderTargetView(m_pExposureTexture, &rtvDesc, &pRtv);
+
+			if (FAILED(hr))
+			{
+				break;
+			}
+
+			m_exposureTextureRTVs.push_back(pRtv);
+		}
 	}
 
 	return hr;
@@ -248,7 +280,7 @@ float ToneMapping::CalculateAverageBrightness(
 {
 	m_pContext->ClearState();
 
-	m_pContext->OMSetRenderTargets(1, &m_pExposureTextureRTV, nullptr);
+	m_pContext->OMSetRenderTargets(1, &m_exposureTextureRTVs[0], nullptr);
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftY = 0;
@@ -292,34 +324,14 @@ float ToneMapping::CalculateAverageBrightness(
 		rect.right = n;
 		rect.bottom = n;
 
-		D3D11_RENDER_TARGET_VIEW_DESC rtvDesc = {};
-		rtvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-		rtvDesc.Texture2D.MipSlice = i + 1;
-
-		ID3D11RenderTargetView* pRtv;
-		m_pDevice->CreateRenderTargetView(m_pExposureTexture, &rtvDesc, &pRtv);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.Format = DXGI_FORMAT_R32_FLOAT;
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 1;
-		srvDesc.Texture2D.MostDetailedMip = i;
-
-		ID3D11ShaderResourceView* pSrv;
-		m_pDevice->CreateShaderResourceView(m_pExposureTexture, &srvDesc, &pSrv);
-
-		m_pContext->OMSetRenderTargets(1, &pRtv, nullptr);
+		m_pContext->OMSetRenderTargets(1, &m_exposureTextureRTVs[(size_t)i + 1], nullptr);
 
 		m_pContext->RSSetViewports(1, &viewport);
 		m_pContext->RSSetScissorRects(1, &rect);
 
-		m_pContext->PSSetShaderResources(0, 1, &pSrv);
+		m_pContext->PSSetShaderResources(0, 1, &m_exposureTextureSRVs[i]);
 
 		m_pContext->Draw(4, 0);
-
-		SafeRelease(pSrv);
-		SafeRelease(pRtv);
 	}
 
 	m_pContext->CopySubresourceRegion(m_pExposureDstTexture, 0, 0, 0, 0, m_pExposureTexture, i, nullptr);

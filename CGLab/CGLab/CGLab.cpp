@@ -175,6 +175,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case VK_RIGHT:
             g_pAppl->HorizontalArrowHandle(false);
             break;
+        case VK_ADD:
+            g_pAppl->NextLightBrightness();
+            break;
         }
         }
         break;

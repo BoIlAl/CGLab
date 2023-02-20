@@ -25,6 +25,10 @@ class ShaderCompiler;
 class ToneMapping;
 class Camera;
 
+
+static constexpr UINT MaxLightNum = 3;
+
+
 class Renderer
 {
 public:
@@ -37,6 +41,8 @@ public:
 
 	void Render();
 	bool Resize(UINT newWidth, UINT newHeight);
+
+	void ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness);
 
 	Camera* getCamera();
 

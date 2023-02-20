@@ -13,8 +13,6 @@
 #include "toneMapping.h"
 #include "Camera.h"
 
-static constexpr UINT MaxLightNum = 3;
-
 
 struct Vertex
 {
@@ -140,7 +138,8 @@ bool Renderer::Init(HWND hWnd)
 	if (SUCCEEDED(hr))
 	{
 		m_pCamera = new Camera();
-		if (!m_pCamera) {
+		if (!m_pCamera)
+		{
 			res = false;
 		}
 	}
@@ -501,7 +500,8 @@ HRESULT Renderer::CreatePlaneResourses()
 	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(&vertices);
 
 	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &m_pPlaneVertexBuffer);
-	if (SUCCEEDED(hr)) {
+	if (SUCCEEDED(hr))
+	{
 		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(m_planeIndexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(&indices);
 		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pPlaneIndexBuffer);
@@ -536,9 +536,9 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		m_lights.push_back(PointLight({ -4.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
-		m_lights.push_back(PointLight({ 4.0f, 0.0f, -4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
-		m_lights.push_back(PointLight({ 0.0f, 0.0f, 4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 10.0f));
+		m_lights.push_back(PointLight({ -4.0f, 0.0f, 0.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ 4.0f, 0.0f, -4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ 0.0f, 0.0f, 4.0f },		{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
 
 		LightBuffer lightBuffer = {};
 		lightBuffer.lightsCount.x = (UINT)m_lights.size();
@@ -600,6 +600,14 @@ bool Renderer::Resize(UINT newWidth, UINT newHeight)
 	}
 
 	return SUCCEEDED(hr);
+}
+
+void Renderer::ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness)
+{
+	assert(lightIdx < m_lights.size());
+
+	m_lights[lightIdx].SetBrightness(newBrightness);
+	FillLightBuffer();
 }
 
 Camera* Renderer::getCamera()

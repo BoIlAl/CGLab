@@ -69,6 +69,16 @@ void App::MouseLButtonUpHandle(int x, int y)
 	m_isPressed = false;
 }
 
+void App::NextLightBrightness()
+{
+	static constexpr FLOAT brightness[] = { 1.0f, 10.0f, 100.0f };
+	static UINT curIdx = 0;
+
+	curIdx = (curIdx + 1u) % (UINT)_countof(brightness);
+
+	m_pRenderer->ChangeLightBrightness(2, brightness[curIdx]);
+}
+
 
 App::App(HWND hWnd) 
 	: m_pRenderer(nullptr, std::mem_fn(&Renderer::Release))
@@ -77,7 +87,8 @@ App::App(HWND hWnd)
 	, m_yMouse(0)
 {
 	auto renderer = Renderer::CreateRenderer(hWnd);
-	if (!renderer) {
+	if (!renderer)
+	{
 		return;
 	}
 	m_pRenderer.reset(renderer);

@@ -17,6 +17,9 @@ public:
 	void MouseLButtonPressHandle(int x, int y);
 	void MouseMovementHandle(int x, int y);
 	void MouseLButtonUpHandle(int x, int y);
+
+	void NextLightBrightness();
+
 private:
 	App(HWND hWnd);
 	~App();

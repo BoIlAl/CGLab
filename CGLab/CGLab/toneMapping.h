@@ -59,8 +59,8 @@ private:
 
 	ID3D11Texture2D* m_pExposureTexture;
 	ID3D11Texture2D* m_pExposureDstTexture;
-	ID3D11ShaderResourceView* m_pExposureTextureSRV;
-	ID3D11RenderTargetView* m_pExposureTextureRTV;
+	std::vector<ID3D11ShaderResourceView*> m_exposureTextureSRVs;
+	std::vector<ID3D11RenderTargetView*> m_exposureTextureRTVs;
 
 	ID3D11VertexShader* m_pAverageBrightnessVS;
 	ID3D11PixelShader* m_pAverageBrightnessPS;
