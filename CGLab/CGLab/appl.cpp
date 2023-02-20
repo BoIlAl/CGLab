@@ -26,18 +26,6 @@ bool Appl::Resize(UINT newWidth, UINT newHeight)
 	return m_pRenderer->Resize(newWidth, newHeight);;
 }
 
-/*bool Appl::KeypressHandle(WPARAM wParam)
-{
-	switch (wParam)
-	{
-	default:
-		{
-			return false;
-		}
-	}
-}*/
-
-
 void Appl::Render()
 {
 	m_pRenderer->Render();

@@ -9,7 +9,6 @@ public:
 	static void DeleteAppl(Appl*& pAppl);
 
 	bool Resize(UINT newWidth, UINT newHeight);
-	//bool KeypressHandle(WPARAM wParam);
 	void Render();
 
 	void VerticalArrowHandle(bool isUpArrow);
@@ -24,7 +23,7 @@ private:
 private:
 	int m_xMouse, m_yMouse;
 	bool m_isPressed;
-	const float deltaMovement = 1.0f;
-	const float deltaRotate = 0.02f;
+	const float deltaMovement = 0.2f;
+	const float deltaRotate = 0.002f;
 	std::unique_ptr<Renderer, std::_Mem_fn<void(Renderer::*)()>> m_pRenderer;
 };
