@@ -1,6 +1,7 @@
 #include "renderer.h"
 
 #include <d3d11.h>
+#include <d3d11_1.h>
 #include <dxgi.h>
 #include <DirectXMath.h>
 
@@ -9,14 +10,10 @@
 
 #include "shaderCompiler.h"
 #include "common.h"
-<<<<<<< HEAD
 #include "toneMapping.h"
-
+#include "Camera.h"
 
 static constexpr UINT MaxLightNum = 3;
-=======
-#include "Camera.h"
->>>>>>> task2-users-input
 
 
 struct Vertex
@@ -38,6 +35,7 @@ struct LightBuffer
 	DirectX::XMUINT4 lightsCount; // r
 	PointLight lights[MaxLightNum];
 };
+
 
 
 Renderer* Renderer::CreateRenderer(HWND hWnd)
@@ -63,7 +61,6 @@ void Renderer::DeleterRenderer(Renderer*& pRenderer)
 	}
 }
 
-
 Renderer::Renderer()
 	: m_pDevice(nullptr)
 	, m_pContext(nullptr)
@@ -76,13 +73,8 @@ Renderer::Renderer()
 	, m_pHDRTextureSRV(nullptr)
 	, m_pRasterizerState(nullptr)
 	, m_pDepthStencilState(nullptr)
-<<<<<<< HEAD
-	, m_pVertexBuffer(nullptr)
-	, m_pIndexBuffer(nullptr)
-	, m_indexCount(0)
 	, m_pConstantBuffer(nullptr)
 	, m_pLightBuffer(nullptr)
-=======
 	, m_pCubeVertexBuffer(nullptr)
 	, m_pCubeIndexBuffer(nullptr)
 	, m_cubeIndexCount(0)
@@ -91,7 +83,6 @@ Renderer::Renderer()
 	, m_planeIndexCount(0)
 	, m_pCubeConstantBuffer(nullptr)
 	, m_pPlaneConstantBuffer(nullptr)
->>>>>>> task2-users-input
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
 	, m_pInputLayout(nullptr)
@@ -101,11 +92,8 @@ Renderer::Renderer()
 	, m_pAnnotation(nullptr)
 	, m_startTime(0)
 	, m_currentTime(0)
-<<<<<<< HEAD
 	, m_timeFromLastFrame(0)
-=======
 	, m_pCamera(nullptr)
->>>>>>> task2-users-input
 #ifdef _DEBUG
 	, m_isDebug(true)
 #else
@@ -174,19 +162,14 @@ void Renderer::Release()
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
-<<<<<<< HEAD
-	SafeRelease(m_pIndexBuffer);
-	SafeRelease(m_pVertexBuffer);
 	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pConstantBuffer);
-=======
 	SafeRelease(m_pCubeIndexBuffer);
 	SafeRelease(m_pCubeVertexBuffer);
 	SafeRelease(m_pPlaneIndexBuffer);
 	SafeRelease(m_pPlaneVertexBuffer);
 	SafeRelease(m_pCubeConstantBuffer);
 	SafeRelease(m_pPlaneConstantBuffer);
->>>>>>> task2-users-input
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerState);
 	SafeRelease(m_pHDRTextureSRV);
@@ -442,7 +425,6 @@ HRESULT Renderer::CreatePipelineStateObjects()
 HRESULT Renderer::CreateCubeResourses()
 {
 	static constexpr Vertex vertices[] = {
-<<<<<<< HEAD
 		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f },	{ 0.0f, -1.0f, 0.0f } },
 		{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
 		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
@@ -472,37 +454,6 @@ HRESULT Renderer::CreateCubeResourses()
 		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
 		{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
 		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } }
-=======
-	{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-	{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-	{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-	{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-
-	{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
-	{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
-	{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f, 1.0f } },
-	{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
-
-	{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
-	{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
-	{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f, 1.0f } },
-	{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
-
-	{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-	{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-	{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-	{ { -0.5f, 0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-
-	{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-	{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-	{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-	{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 1.0f, 1.0f } },
-
-	{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-	{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-	{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-	{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } }
->>>>>>> task2-users-input
 	};
 
 	static constexpr UINT16 indices[] = {
@@ -562,25 +513,21 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		hr = CreatePlaneResourses();
 	}
+
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
 		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pCubeConstantBuffer);
 	}
-<<<<<<< HEAD
 
-	if (SUCCEEDED(hr)) 
-=======
 	if (SUCCEEDED(hr))
->>>>>>> task2-users-input
 	{
 		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
 		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pPlaneConstantBuffer);
 	}
 
-<<<<<<< HEAD
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
@@ -621,9 +568,6 @@ HRESULT Renderer::SetResourceName(ID3D11Resource* pResource, const std::string& 
 		return E_FAIL;
 	}
 	return pResource->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)name.size(), name.c_str());
-=======
-	return S_OK;
->>>>>>> task2-users-input
 }
 
 
@@ -688,19 +632,17 @@ void Renderer::Update()
 
 	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(s_PI * (m_currentTime - m_startTime) / 10e6f);
 	DirectX::XMMATRIX modelPlaneMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
-	//^Убрать отсюдова
 	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
 
 	ConstantBuffer constantBuffer = {};
-<<<<<<< HEAD
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-=======
-	DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix * m_pCamera->GetViewMatrix() * projMatrix));
-	m_pContext->UpdateSubresource(m_pCubeConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
->>>>>>> task2-users-input
 
-	DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix * m_pCamera->GetViewMatrix() * projMatrix));
+	//DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelMatrix));
+	//DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
+
+	//DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix * m_pCamera->GetViewMatrix() * projMatrix));
+	m_pContext->UpdateSubresource(m_pCubeConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+
+	//DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix * m_pCamera->GetViewMatrix() * projMatrix));
 	m_pContext->UpdateSubresource(m_pPlaneConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 }
 
@@ -708,6 +650,8 @@ void Renderer::Update()
 void Renderer::Render()
 {
 	Update();
+
+	m_pAnnotation->BeginEvent(L"Draw Cube");
 
 	m_pContext->ClearState();
 
@@ -737,13 +681,10 @@ void Renderer::Render()
 
 	RenderScene();
 
-<<<<<<< HEAD
 	m_pAnnotation->EndEvent();
 
 	PostProcessing();
 
-=======
->>>>>>> task2-users-input
 	m_pSwapChain->Present(0, 0);
 }
 
@@ -766,14 +707,11 @@ void Renderer::RenderScene()
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-<<<<<<< HEAD
-	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer };
-=======
-	ID3D11Buffer* constantBuffers[] = { m_pCubeConstantBuffer };
->>>>>>> task2-users-input
+	//ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer };
+	//ID3D11Buffer* constantBuffers[] = { m_pCubeConstantBuffer };
 
-	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	//m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	//m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 
 	m_pContext->DrawIndexed(m_cubeIndexCount, 0, 0);
 

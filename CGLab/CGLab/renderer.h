@@ -18,14 +18,11 @@ struct ID3D11Buffer;
 struct ID3D11VertexShader;
 struct ID3D11PixelShader;
 struct ID3D11InputLayout;
+struct ID3DUserDefinedAnnotation;
 
 class ShaderCompiler;
-<<<<<<< HEAD
 class ToneMapping;
-
-=======
 class Camera;
->>>>>>> task2-users-input
 
 class Renderer
 {
@@ -56,6 +53,8 @@ private:
 	HRESULT CreatePlaneResourses();
 
 	HRESULT CreateSceneResources();
+
+	HRESULT SetResourceName(ID3D11Resource* pResource, const std::string& name);
 
 	void Update();
 	void RenderScene();
@@ -91,17 +90,15 @@ private:
 	ID3D11Buffer* m_pCubeIndexBuffer;
 	UINT m_cubeIndexCount;
 
-<<<<<<< HEAD
-	ID3D11Buffer* m_pConstantBuffer;
-	ID3D11Buffer* m_pLightBuffer;
-=======
 	ID3D11Buffer* m_pPlaneVertexBuffer;
 	ID3D11Buffer* m_pPlaneIndexBuffer;
 	UINT m_planeIndexCount;
 
 	ID3D11Buffer* m_pCubeConstantBuffer;
 	ID3D11Buffer* m_pPlaneConstantBuffer;
->>>>>>> task2-users-input
+
+	ID3D11Buffer* m_pConstantBuffer;
+	ID3D11Buffer* m_pLightBuffer;
 
 	ID3D11VertexShader* m_pVertexShader;
 	ID3D11PixelShader* m_pPixelShader;
@@ -112,6 +109,8 @@ private:
 	UINT m_windowHeight;
 
 	ShaderCompiler* m_pShaderCompiler;
+
+	ID3DUserDefinedAnnotation* m_pAnnotation;
 
 	size_t m_startTime;
 	size_t m_currentTime;
