@@ -36,17 +36,16 @@
     <ClInclude Include="shaderCompiler.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-<<<<<<< HEAD
     <ClInclude Include="toneMapping.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="light.h">
-=======
-    <ClInclude Include="appl.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="app.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="camera.h">
->>>>>>> task2-users-input
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>
@@ -60,17 +59,16 @@
     <ClCompile Include="shaderCompiler.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-<<<<<<< HEAD
     <ClCompile Include="toneMapping.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="light.cpp">
-=======
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
     <ClCompile Include="camera.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="appl.cpp">
->>>>>>> task2-users-input
+    <ClCompile Include="app.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>

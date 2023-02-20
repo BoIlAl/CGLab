@@ -73,7 +73,6 @@ Renderer::Renderer()
 	, m_pHDRTextureSRV(nullptr)
 	, m_pRasterizerState(nullptr)
 	, m_pDepthStencilState(nullptr)
-	, m_pConstantBuffer(nullptr)
 	, m_pLightBuffer(nullptr)
 	, m_pCubeVertexBuffer(nullptr)
 	, m_pCubeIndexBuffer(nullptr)
@@ -163,7 +162,6 @@ void Renderer::Release()
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
 	SafeRelease(m_pLightBuffer);
-	SafeRelease(m_pConstantBuffer);
 	SafeRelease(m_pCubeIndexBuffer);
 	SafeRelease(m_pCubeVertexBuffer);
 	SafeRelease(m_pPlaneIndexBuffer);
@@ -180,6 +178,7 @@ void Renderer::Release()
 	SafeRelease(m_pBackBufferRTV);
 	SafeRelease(m_pSwapChain);
 	SafeRelease(m_pContext);
+	SafeRelease(m_pAnnotation);
 
 	delete m_pShaderCompiler;
 	delete m_pToneMapping;
@@ -249,6 +248,11 @@ HRESULT Renderer::CreateDevice(IDXGIFactory* pFactory)
 			nullptr,
 			&m_pContext
 		);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pContext->QueryInterface(IID_PPV_ARGS(&m_pAnnotation));
 	}
 
 	SafeRelease(pAdapter);
@@ -482,10 +486,10 @@ HRESULT Renderer::CreateCubeResourses()
 HRESULT Renderer::CreatePlaneResourses()
 {
 	static constexpr Vertex vertices[] = {
-	{ { -0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f } },
-	{ { -0.5f, 0.0f, 0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f } },
-	{ { 0.5f, 0.0f, 0.5f },		{ 0.2f, 0.2f, 0.2f, 1.0f } },
-	{ { 0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f} },
+	{ { -0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { -0.5f, 0.0f, 0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { 0.5f, 0.0f, 0.5f },		{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { 0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
 	};
 
 	static constexpr UINT16 indices[] = {
@@ -532,9 +536,9 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		m_lights.push_back(PointLight({ -2.0f, 0.0f, -3.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 100.0f));
-		m_lights.push_back(PointLight({ 2.0f, 0.0f, -3.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, 10.0f));
-		m_lights.push_back(PointLight({ 0.0f, 2.0f, -3.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, 1.0f));
+		m_lights.push_back(PointLight({ -4.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		m_lights.push_back(PointLight({ 4.0f, 0.0f, -4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		m_lights.push_back(PointLight({ 0.0f, 0.0f, 4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 10.0f));
 
 		LightBuffer lightBuffer = {};
 		lightBuffer.lightsCount.x = (UINT)m_lights.size();
@@ -630,19 +634,19 @@ void Renderer::Update()
 	FLOAT width = s_near / tanf(s_fov / 2.0f);
 	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
 
-	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(s_PI * (m_currentTime - m_startTime) / 10e6f);
+	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(s_PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
 	DirectX::XMMATRIX modelPlaneMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
 	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
+	DirectX::XMMATRIX viewMatrix = m_pCamera->GetViewMatrix();
 
 	ConstantBuffer constantBuffer = {};
 
-	//DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelMatrix));
-	//DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-
-	//DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix * m_pCamera->GetViewMatrix() * projMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
 	m_pContext->UpdateSubresource(m_pCubeConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
-	//DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix * m_pCamera->GetViewMatrix() * projMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
 	m_pContext->UpdateSubresource(m_pPlaneConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 }
 
@@ -694,9 +698,6 @@ void Renderer::RenderScene()
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-	m_pContext->IASetIndexBuffer(m_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-
 	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	m_pContext->IASetInputLayout(m_pInputLayout);
@@ -707,35 +708,27 @@ void Renderer::RenderScene()
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	//ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer };
-	//ID3D11Buffer* constantBuffers[] = { m_pCubeConstantBuffer };
 
-	//m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-	//m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+	m_pContext->IASetIndexBuffer(m_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+	ID3D11Buffer* constantBuffers[] = { m_pCubeConstantBuffer, m_pLightBuffer };
+
+	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 
 	m_pContext->DrawIndexed(m_cubeIndexCount, 0, 0);
 
 
 	ID3D11Buffer* vertexBuffers1[1] = { m_pPlaneVertexBuffer };
-	
 
 	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers1, &stride, &offset);
 	m_pContext->IASetIndexBuffer(m_pPlaneIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	ID3D11Buffer* constantBuffers1[] = { m_pPlaneConstantBuffer, m_pLightBuffer };
 
-	m_pContext->IASetInputLayout(m_pInputLayout);
-
-	m_pContext->RSSetState(m_pRasterizerState);
-	m_pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
-
-	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
-	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
-
-	ID3D11Buffer* constantBuffers1[] = { m_pPlaneConstantBuffer };
-
-	m_pContext->VSSetConstantBuffers(0, 1, constantBuffers1);
-	m_pContext->PSSetConstantBuffers(0, 1, constantBuffers1);
+	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers1);
+	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers1);
 
 	m_pContext->DrawIndexed(m_planeIndexCount, 0, 0);
 }

@@ -19,6 +19,7 @@ struct ID3D11VertexShader;
 struct ID3D11PixelShader;
 struct ID3D11InputLayout;
 struct ID3DUserDefinedAnnotation;
+struct ID3D11Resource;
 
 class ShaderCompiler;
 class ToneMapping;
@@ -96,8 +97,6 @@ private:
 
 	ID3D11Buffer* m_pCubeConstantBuffer;
 	ID3D11Buffer* m_pPlaneConstantBuffer;
-
-	ID3D11Buffer* m_pConstantBuffer;
 	ID3D11Buffer* m_pLightBuffer;
 
 	ID3D11VertexShader* m_pVertexShader;

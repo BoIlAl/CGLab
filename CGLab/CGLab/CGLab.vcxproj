@@ -86,7 +86,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="appl.h" />
+    <ClInclude Include="app.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="CGLab.h" />
     <ClInclude Include="common.h" />
@@ -98,7 +98,7 @@
     <ClInclude Include="toneMapping.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="appl.cpp" />
+    <ClCompile Include="app.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="CGLab.cpp" />
     <ClCompile Include="light.cpp" />

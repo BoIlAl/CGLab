@@ -3,10 +3,10 @@
 
 class Renderer;
 
-class Appl {
+class App {
 public:
-	static Appl* CreateAppl(HWND hWnd);
-	static void DeleteAppl(Appl*& pAppl);
+	static App* CreateAppl(HWND hWnd);
+	static void DeleteAppl(App*& pAppl);
 
 	bool Resize(UINT newWidth, UINT newHeight);
 	void Render();
@@ -18,8 +18,8 @@ public:
 	void MouseMovementHandle(int x, int y);
 	void MouseLButtonUpHandle(int x, int y);
 private:
-	Appl(HWND hWnd);
-	~Appl();
+	App(HWND hWnd);
+	~App();
 private:
 	int m_xMouse, m_yMouse;
 	bool m_isPressed;

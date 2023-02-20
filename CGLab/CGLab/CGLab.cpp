@@ -3,7 +3,7 @@
 
 #include "framework.h"
 #include "CGLab.h"
-#include "appl.h"
+#include "app.h"
 
 #define MAX_LOADSTRING 100
 
@@ -19,7 +19,7 @@ LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
 HWND g_hWnd;
-Appl* g_pAppl;
+App* g_pAppl;
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -46,7 +46,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     MSG msg;
 
-    g_pAppl = Appl::CreateAppl(g_hWnd);
+    g_pAppl = App::CreateAppl(g_hWnd);
 
     if (g_pAppl == nullptr)
     {
@@ -71,7 +71,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
         g_pAppl->Render();
     }
 
-    Appl::DeleteAppl(g_pAppl);
+    App::DeleteAppl(g_pAppl);
 
     return (int) msg.wParam;
 }
