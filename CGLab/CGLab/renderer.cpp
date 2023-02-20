@@ -501,6 +501,11 @@ bool Renderer::Resize(UINT newWidth, UINT newHeight)
 	return SUCCEEDED(hr);
 }
 
+Camera* Renderer::getCamera()
+{
+	return m_pCamera;
+}
+
 
 void Renderer::Update()
 {

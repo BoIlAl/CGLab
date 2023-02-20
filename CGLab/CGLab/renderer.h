@@ -33,6 +33,8 @@ public:
 	void Render();
 	bool Resize(UINT newWidth, UINT newHeight);
 
+	Camera* getCamera();
+
 private:
 	Renderer();
 

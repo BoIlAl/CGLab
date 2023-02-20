@@ -161,11 +161,31 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     case WM_KEYDOWN:
         {
-            if (wParam == VK_UP)
-            {
-
-            }
+        switch (wParam)
+        {
+        case VK_UP:
+            g_pAppl->VerticalArrowHandle(true);
+            break;
+        case VK_DOWN:
+            g_pAppl->VerticalArrowHandle(false);
+            break;
+        case VK_LEFT:
+            g_pAppl->HorizontalArrowHandle(true);
+            break;
+        case VK_RIGHT:
+            g_pAppl->HorizontalArrowHandle(false);
+            break;
         }
+        }
+        break;
+    case WM_LBUTTONDOWN:
+        g_pAppl->MouseLButtonPressHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        break;
+    case WM_MOUSEMOVE:
+        g_pAppl->MouseMovementHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        break;
+    case WM_LBUTTONUP:
+        g_pAppl->MouseLButtonUpHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         break;
     case WM_COMMAND:
         {

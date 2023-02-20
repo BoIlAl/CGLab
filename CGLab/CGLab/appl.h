@@ -9,11 +9,22 @@ public:
 	static void DeleteAppl(Appl*& pAppl);
 
 	bool Resize(UINT newWidth, UINT newHeight);
-	bool KeypressHandle(WPARAM wParam);
+	//bool KeypressHandle(WPARAM wParam);
 	void Render();
+
+	void VerticalArrowHandle(bool isUpArrow);
+	void HorizontalArrowHandle(bool isLeftArrow);
+
+	void MouseLButtonPressHandle(int x, int y);
+	void MouseMovementHandle(int x, int y);
+	void MouseLButtonUpHandle(int x, int y);
 private:
 	Appl(HWND hWnd);
 	~Appl();
 private:
+	int m_xMouse, m_yMouse;
+	bool m_isPressed;
+	const float deltaMovement = 1.0f;
+	const float deltaRotate = 0.02f;
 	std::unique_ptr<Renderer, std::_Mem_fn<void(Renderer::*)()>> m_pRenderer;
 };
