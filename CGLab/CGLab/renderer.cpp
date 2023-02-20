@@ -484,8 +484,8 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		m_lights.push_back(PointLight({ -2.0f, 0.0f, -3.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
-		m_lights.push_back(PointLight({ 2.0f, 0.0f, -3.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, 1.0f));
+		m_lights.push_back(PointLight({ -2.0f, 0.0f, -3.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 100.0f));
+		m_lights.push_back(PointLight({ 2.0f, 0.0f, -3.0f }, { 1.0f, 0.0f, 0.0f, 1.0f }, 10.0f));
 		m_lights.push_back(PointLight({ 0.0f, 2.0f, -3.0f }, { 0.0f, 0.0f, 1.0f, 1.0f }, 1.0f));
 
 		LightBuffer lightBuffer = {};
@@ -502,7 +502,7 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
-		m_pToneMapping = ToneMapping::CreateToneMapping(m_pDevice, m_pContext, m_pShaderCompiler);
+		m_pToneMapping = ToneMapping::CreateToneMapping(m_pDevice, m_pContext, m_pShaderCompiler, m_windowWidth, m_windowHeight);
 
 		if (m_pToneMapping == nullptr)
 		{

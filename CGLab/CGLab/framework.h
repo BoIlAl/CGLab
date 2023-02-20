@@ -11,7 +11,8 @@
 // Файлы заголовков среды выполнения C
 #include <stdlib.h>
 #include <malloc.h>
-#include <memory.h>
+#include <memory>
+#include <math.h>
 #include <tchar.h>
 #include <string>
 #include <vector>

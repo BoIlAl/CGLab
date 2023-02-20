@@ -19,7 +19,8 @@ class ShaderCompiler;
 class ToneMapping
 {
 public:
-	static ToneMapping* CreateToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, ShaderCompiler* pShaderCompiler);
+	static ToneMapping* CreateToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, 
+									      ShaderCompiler* pShaderCompiler, UINT windowWidth, UINT windowHeight);
 
 	~ToneMapping();
 
@@ -32,7 +33,7 @@ public:
 	);
 
 private:
-	ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext);
+	ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT windowWidth, UINT windowHeight);
 
 	HRESULT CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler);
 	HRESULT CreateResources();
@@ -40,6 +41,11 @@ private:
 	FLOAT EyeAdaptation(FLOAT currentExposure, FLOAT deltaTime) const;
 
 	void Update(FLOAT currentExposure, FLOAT deltaTime);
+
+	float CalculateAverageBrightness(
+		ID3D11ShaderResourceView* pSrcTextureSRV,
+		UINT renderTargetWidth,
+		UINT renderTargetHeight);
 
 private:
 	ID3D11Device* m_pDevice;
@@ -50,6 +56,19 @@ private:
 
 	ID3D11VertexShader* m_pToneMappingVS;
 	ID3D11PixelShader* m_pToneMappingPS;
+
+	ID3D11Texture2D* m_pExposureTexture;
+	ID3D11Texture2D* m_pExposureDstTexture;
+	ID3D11ShaderResourceView* m_pExposureTextureSRV;
+	ID3D11RenderTargetView* m_pExposureTextureRTV;
+
+	ID3D11VertexShader* m_pAverageBrightnessVS;
+	ID3D11PixelShader* m_pAverageBrightnessPS;
+
+	ID3D11VertexShader* m_pDownSampleVS;
+	ID3D11PixelShader* m_pDownSamplePS;
+
+	UINT m_textureSize;
 
 	ID3D11Buffer* m_pExposureBuffer;
 	FLOAT m_adaptedExposure;

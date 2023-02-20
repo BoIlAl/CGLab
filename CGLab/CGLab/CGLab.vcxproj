@@ -110,7 +110,7 @@
     <Image Include="small.ico" />
   </ItemGroup>
   <ItemGroup>
-    <ApplicationDefinition Include="shaders\simpleShader.hlsl">
+    <None Include="shaders\simpleShader.hlsl">
       <FileType>Document</FileType>
       <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">PS</EntryPointName>
       <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.0</ShaderModel>
@@ -119,10 +119,18 @@
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       </ObjectFileOutput>
-    </ApplicationDefinition>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\toneMapping.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\averageBrightness.hlsl">
+      <FileType>Document</FileType>
+    </None>
+    <None Include="shaders\downSample.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
