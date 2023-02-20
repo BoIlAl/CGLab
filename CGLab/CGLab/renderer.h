@@ -2,6 +2,7 @@
 
 #include "framework.h"
 
+struct Vertex;
 struct IDXGIFactory;
 struct ID3D11Device;
 struct ID3D11DeviceContext;
@@ -15,11 +16,9 @@ struct ID3D11Buffer;
 struct ID3D11VertexShader;
 struct ID3D11PixelShader;
 struct ID3D11InputLayout;
-struct ID3DUserDefinedAnnotation;
-struct ID3D11Resource;
 
 class ShaderCompiler;
-
+class Camera;
 
 class Renderer
 {
@@ -43,8 +42,11 @@ private:
 	HRESULT CreateSwapChain(IDXGIFactory* pFactory, HWND hWnd);
 	HRESULT CreateBackBuffer();
 	HRESULT CreatePipelineStateObjects();
+
+	HRESULT CreateCubeResourses();
+	HRESULT CreatePlaneResourses();
+
 	HRESULT CreateSceneResources();
-	HRESULT SetResourceName(ID3D11Resource* pResource, const std::string& name);
 
 	void Update();
 	void RenderScene();
@@ -56,8 +58,6 @@ private:
 	static constexpr FLOAT s_near = 0.001f;
 	static constexpr FLOAT s_far = 1000.0f;
 	static constexpr FLOAT s_fov = s_PI / 2.0f;
-
-	static constexpr FLOAT s_cameraPosition[3] = { 0.0f, 0.0f, -5.0f };
 
 private:
 	ID3D11Device* m_pDevice;
@@ -71,11 +71,16 @@ private:
 	ID3D11RasterizerState* m_pRasterizerState;
 	ID3D11DepthStencilState* m_pDepthStencilState;
 
-	ID3D11Buffer* m_pVertexBuffer;
-	ID3D11Buffer* m_pIndexBuffer;
-	UINT m_indexCount;
+	ID3D11Buffer* m_pCubeVertexBuffer;
+	ID3D11Buffer* m_pCubeIndexBuffer;
+	UINT m_cubeIndexCount;
 
-	ID3D11Buffer* m_pConstantBuffer;
+	ID3D11Buffer* m_pPlaneVertexBuffer;
+	ID3D11Buffer* m_pPlaneIndexBuffer;
+	UINT m_planeIndexCount;
+
+	ID3D11Buffer* m_pCubeConstantBuffer;
+	ID3D11Buffer* m_pPlaneConstantBuffer;
 
 	ID3D11VertexShader* m_pVertexShader;
 	ID3D11PixelShader* m_pPixelShader;
@@ -87,10 +92,10 @@ private:
 
 	ShaderCompiler* m_pShaderCompiler;
 
-	ID3DUserDefinedAnnotation* m_pAnnotation;
-
 	size_t m_startTime;
 	size_t m_currentTime;
+
+	Camera* m_pCamera;
 
 	bool m_isDebug;
 };

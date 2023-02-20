@@ -1,8 +1,6 @@
 #include "renderer.h"
 
 #include <d3d11.h>
-#include <d3d11_1.h>
-
 #include <dxgi.h>
 #include <DirectXMath.h>
 
@@ -11,6 +9,7 @@
 
 #include "shaderCompiler.h"
 #include "common.h"
+#include "Camera.h"
 
 
 struct Vertex
@@ -57,10 +56,14 @@ Renderer::Renderer()
 	, m_pDepthTextureDSV(nullptr)
 	, m_pRasterizerState(nullptr)
 	, m_pDepthStencilState(nullptr)
-	, m_pVertexBuffer(nullptr)
-	, m_pIndexBuffer(nullptr)
-	, m_indexCount(0)
-	, m_pConstantBuffer(nullptr)
+	, m_pCubeVertexBuffer(nullptr)
+	, m_pCubeIndexBuffer(nullptr)
+	, m_cubeIndexCount(0)
+	, m_pPlaneVertexBuffer(nullptr)
+	, m_pPlaneIndexBuffer(nullptr)
+	, m_planeIndexCount(0)
+	, m_pCubeConstantBuffer(nullptr)
+	, m_pPlaneConstantBuffer(nullptr)
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
 	, m_pInputLayout(nullptr)
@@ -69,6 +72,7 @@ Renderer::Renderer()
 	, m_pShaderCompiler(nullptr)
 	, m_startTime(0)
 	, m_currentTime(0)
+	, m_pCamera(nullptr)
 #ifdef _DEBUG
 	, m_isDebug(true)
 #else
@@ -111,13 +115,19 @@ bool Renderer::Init(HWND hWnd)
 	}
 
 	bool res = SUCCEEDED(hr);
+
+	if (SUCCEEDED(hr))
+	{
+		m_pCamera = new Camera();
+		if (!m_pCamera) {
+			res = false;
+		}
+	}
 	
 	if (!res)
 	{
 		Release();
 	}
-
-
 
 	SafeRelease(pFactory);
 
@@ -130,9 +140,12 @@ void Renderer::Release()
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
-	SafeRelease(m_pIndexBuffer);
-	SafeRelease(m_pVertexBuffer);
-	SafeRelease(m_pConstantBuffer);
+	SafeRelease(m_pCubeIndexBuffer);
+	SafeRelease(m_pCubeVertexBuffer);
+	SafeRelease(m_pPlaneIndexBuffer);
+	SafeRelease(m_pPlaneVertexBuffer);
+	SafeRelease(m_pCubeConstantBuffer);
+	SafeRelease(m_pPlaneConstantBuffer);
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerState);
 	SafeRelease(m_pDepthTextureDSV);
@@ -140,11 +153,15 @@ void Renderer::Release()
 	SafeRelease(m_pBackBufferRTV);
 	SafeRelease(m_pSwapChain);
 	SafeRelease(m_pContext);
-	SafeRelease(m_pAnnotation);
 
 	if (m_pShaderCompiler != nullptr)
 	{
 		delete m_pShaderCompiler;
+	}
+
+	if (m_pCamera != nullptr)
+	{
+		delete m_pCamera;
 	}
 
 	if (m_isDebug) 
@@ -194,13 +211,11 @@ HRESULT Renderer::CreateDevice(IDXGIFactory* pFactory)
 	{
 		D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0 };
 
-		UINT flags = m_isDebug ? D3D11_CREATE_DEVICE_DEBUG : 0;
-
 		hr = D3D11CreateDevice(
 			pAdapter,
 			D3D_DRIVER_TYPE_UNKNOWN,
 			nullptr,
-			flags,
+			D3D11_CREATE_DEVICE_DEBUG,
 			levels,
 			1,
 			D3D11_SDK_VERSION,
@@ -208,11 +223,6 @@ HRESULT Renderer::CreateDevice(IDXGIFactory* pFactory)
 			nullptr,
 			&m_pContext
 		);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		hr = m_pContext->QueryInterface(IID_PPV_ARGS(&m_pAnnotation));
 	}
 
 	SafeRelease(pAdapter);
@@ -342,8 +352,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = 
-		{
+		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
 			CreateInputElementDesc("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0),
 			CreateInputElementDesc("COLOR", DXGI_FORMAT_R32G32B32A32_FLOAT, sizeof(DirectX::XMFLOAT3))
 		};
@@ -360,38 +369,38 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	return hr;
 }
 
-HRESULT Renderer::CreateSceneResources()
+HRESULT Renderer::CreateCubeResourses()
 {
 	static constexpr Vertex vertices[] = {
-		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-		{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
+	{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
+	{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
+	{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
+	{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f } },
 
-		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
+	{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
+	{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
+	{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f, 1.0f } },
+	{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f } },
 
-		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
+	{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
+	{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
+	{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f, 1.0f } },
+	{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f } },
 
-		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
+	{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
+	{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
+	{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
+	{ { -0.5f, 0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f } },
 
-		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 1.0f, 1.0f } },
+	{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
+	{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
+	{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f } },
+	{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 1.0f, 1.0f } },
 
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
-		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } }
+	{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
+	{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
+	{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } },
+	{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f } }
 	};
 
 	static constexpr UINT16 indices[] = {
@@ -403,43 +412,68 @@ HRESULT Renderer::CreateSceneResources()
 		20, 22, 21, 20, 23, 22
 	};
 
+	m_cubeIndexCount = _countof(indices);
 	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc(_countof(vertices) * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
 	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(&vertices);
 
-	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &m_pVertexBuffer);
-
+	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &m_pCubeVertexBuffer);
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(_countof(indices) * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(&indices);
-		
-		m_indexCount = _countof(indices);
-
-		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pIndexBuffer);
+		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pCubeIndexBuffer);
 	}
+	return hr;
+}
 
+HRESULT Renderer::CreatePlaneResourses()
+{
+	static constexpr Vertex vertices[] = {
+	{ { -0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f } },
+	{ { -0.5f, 0.0f, 0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f } },
+	{ { 0.5f, 0.0f, 0.5f },		{ 0.2f, 0.2f, 0.2f, 1.0f } },
+	{ { 0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f} },
+	};
 
+	static constexpr UINT16 indices[] = {
+		0, 1, 2, 0, 2, 3
+	};
+
+	m_planeIndexCount = _countof(indices);
+	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc(_countof(vertices) * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
+	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(&vertices);
+
+	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &m_pPlaneVertexBuffer);
+	if (SUCCEEDED(hr)) {
+		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(m_planeIndexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
+		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(&indices);
+		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pPlaneIndexBuffer);
+	}
+	return hr;
+}
+
+HRESULT Renderer::CreateSceneResources()
+{
+
+	HRESULT hr = CreateCubeResourses();
+	if (SUCCEEDED(hr))
+	{
+		hr = CreatePlaneResourses();
+	}
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pConstantBuffer);
+		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pCubeConstantBuffer);
 	}
-	if (SUCCEEDED(hr)) 
+	if (SUCCEEDED(hr))
 	{
-		hr = SetResourceName(m_pConstantBuffer, "Const Buffer");
+		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pPlaneConstantBuffer);
 	}
 
-	return hr;
-}
-
-HRESULT Renderer::SetResourceName(ID3D11Resource* pResource, const std::string& name)
-{
-	if (!pResource) 
-	{
-		return E_FAIL;
-	}
-	return pResource->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)name.size(), name.c_str());
+	return S_OK;
 }
 
 
@@ -483,28 +517,23 @@ void Renderer::Update()
 	FLOAT width = s_near / tanf(s_fov / 2.0f);
 	FLOAT height = ((float)m_windowHeight / m_windowWidth) * width;
 
-	DirectX::XMMATRIX modelMatrix = DirectX::XMMatrixRotationY(s_PI * (m_currentTime - m_startTime) / 10e6f);
-
+	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(s_PI * (m_currentTime - m_startTime) / 10e6f);
+	DirectX::XMMATRIX modelPlaneMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
+	//^Убрать отсюдова
 	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
-	
-	DirectX::XMMATRIX viewMatrix = DirectX::XMMatrixLookToLH(
-		{ s_cameraPosition[0], s_cameraPosition[1], s_cameraPosition[2], 1.0f },
-		{ 0.0f, 0.0f, 1.0f, 0.0f },
-		{ 0.0f, 1.0f, 0.0f, 0.0f }
-	);
 
 	ConstantBuffer constantBuffer = {};
-	DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelMatrix * viewMatrix * projMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix * m_pCamera->GetViewMatrix() * projMatrix));
+	m_pContext->UpdateSubresource(m_pCubeConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
-	m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+	DirectX::XMStoreFloat4x4(&constantBuffer.mvpMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix * m_pCamera->GetViewMatrix() * projMatrix));
+	m_pContext->UpdateSubresource(m_pPlaneConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 }
 
 
 void Renderer::Render()
 {
 	Update();
-
-	m_pAnnotation->BeginEvent(L"DrawCube");
 
 	m_pContext->ClearState();
 
@@ -533,19 +562,17 @@ void Renderer::Render()
 
 	RenderScene();
 
-	m_pAnnotation->EndEvent();
-
 	m_pSwapChain->Present(0, 0);
 }
 
 void Renderer::RenderScene()
 {
-	ID3D11Buffer* vertexBuffers[] = { m_pVertexBuffer };
+	ID3D11Buffer* vertexBuffers[] = { m_pCubeVertexBuffer };
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
 	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-	m_pContext->IASetIndexBuffer(m_pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+	m_pContext->IASetIndexBuffer(m_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
 	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
@@ -557,10 +584,34 @@ void Renderer::RenderScene()
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer };
+	ID3D11Buffer* constantBuffers[] = { m_pCubeConstantBuffer };
 
 	m_pContext->VSSetConstantBuffers(0, 1, constantBuffers);
 	m_pContext->PSSetConstantBuffers(0, 1, constantBuffers);
 
-	m_pContext->DrawIndexed(m_indexCount, 0, 0);
+	m_pContext->DrawIndexed(m_cubeIndexCount, 0, 0);
+
+
+	ID3D11Buffer* vertexBuffers1[1] = { m_pPlaneVertexBuffer };
+	
+
+	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers1, &stride, &offset);
+	m_pContext->IASetIndexBuffer(m_pPlaneIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	m_pContext->IASetInputLayout(m_pInputLayout);
+
+	m_pContext->RSSetState(m_pRasterizerState);
+	m_pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
+
+	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
+	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
+
+	ID3D11Buffer* constantBuffers1[] = { m_pPlaneConstantBuffer };
+
+	m_pContext->VSSetConstantBuffers(0, 1, constantBuffers1);
+	m_pContext->PSSetConstantBuffers(0, 1, constantBuffers1);
+
+	m_pContext->DrawIndexed(m_planeIndexCount, 0, 0);
 }

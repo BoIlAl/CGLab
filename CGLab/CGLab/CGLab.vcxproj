@@ -86,6 +86,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="appl.h" />
+    <ClInclude Include="camera.h" />
     <ClInclude Include="CGLab.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="framework.h" />
@@ -94,6 +96,8 @@
     <ClInclude Include="targetver.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="appl.cpp" />
+    <ClCompile Include="camera.cpp" />
     <ClCompile Include="CGLab.cpp" />
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="shaderCompiler.cpp" />
