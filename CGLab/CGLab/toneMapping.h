@@ -12,6 +12,7 @@ struct ID3D11Texture2D;
 struct ID3D11RenderTargetView;
 struct ID3D11ShaderResourceView;
 struct ID3D11Buffer;
+struct ID3DUserDefinedAnnotation;
 
 class ShaderCompiler;
 
@@ -32,6 +33,8 @@ public:
 		FLOAT deltaTime
 	);
 
+	void UseAnnotations(ID3DUserDefinedAnnotation* pAnnotation);
+
 private:
 	ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT maxWindowSize);
 
@@ -48,6 +51,9 @@ private:
 		UINT renderTargetHeight);
 
 	UINT DefaineMostDetailedMip(UINT width, UINT height) const;
+
+	void BeginEvent(LPCWSTR name) const;
+	void EndEvent() const;
 
 private:
 	ID3D11Device* m_pDevice;
@@ -69,6 +75,8 @@ private:
 
 	ID3D11VertexShader* m_pDownSampleVS;
 	ID3D11PixelShader* m_pDownSamplePS;
+
+	ID3DUserDefinedAnnotation* m_pAnnotation;
 
 	UINT m_textureSize;
 	UINT m_mipsNum;

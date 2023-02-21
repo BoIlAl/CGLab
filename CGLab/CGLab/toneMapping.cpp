@@ -1,6 +1,7 @@
 #include "toneMapping.h"
 
 #include <d3d11.h>
+#include <d3d11_1.h>
 #include <DirectXMath.h>
 
 #include "common.h"
@@ -42,17 +43,18 @@ ToneMapping::ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, U
 	, m_pMinMagLinearSampler(nullptr)
 	, m_pToneMappingVS(nullptr)
 	, m_pToneMappingPS(nullptr)
-	, m_pExposureBuffer(nullptr)
 	, m_adaptedBrightness(1.0f)
 	, m_textureSize(MinPower2(maxWindowSize, maxWindowSize))
 	, m_mipsNum(GetPowerOf2(m_textureSize))
 	, m_mostDetailedMip(0)
 	, m_pExposureTexture(nullptr)
+	, m_pExposureDstTexture(nullptr)
 	, m_pAverageBrightnessVS(nullptr)
 	, m_pAverageBrightnessPS(nullptr)
 	, m_pDownSampleVS(nullptr)
 	, m_pDownSamplePS(nullptr)
-	, m_pExposureDstTexture(nullptr)
+	, m_pAnnotation(nullptr)
+	, m_pExposureBuffer(nullptr)
 {}
 
 ToneMapping::~ToneMapping()
@@ -167,6 +169,12 @@ HRESULT ToneMapping::CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler)
 }
 
 
+void ToneMapping::UseAnnotations(ID3DUserDefinedAnnotation* pAnnotation)
+{
+	m_pAnnotation = pAnnotation;
+}
+
+
 HRESULT ToneMapping::CreateResources()
 {
 	D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ExposureBuffer), D3D11_BIND_CONSTANT_BUFFER);
@@ -275,6 +283,24 @@ UINT ToneMapping::DefaineMostDetailedMip(UINT width, UINT height) const
 }
 
 
+void ToneMapping::BeginEvent(LPCWSTR name) const
+{
+	if (m_pAnnotation != nullptr)
+	{
+		m_pAnnotation->BeginEvent(name);
+	}
+}
+
+
+void ToneMapping::EndEvent() const
+{
+	if (m_pAnnotation != nullptr)
+	{
+		m_pAnnotation->EndEvent();
+	}
+}
+
+
 void ToneMapping::Update(FLOAT averageBrightness, FLOAT deltaTime)
 {
 	m_adaptedBrightness = EyeAdaptation(averageBrightness, deltaTime);
@@ -291,6 +317,8 @@ float ToneMapping::CalculateAverageBrightness(
 	UINT renderTargetHeight
 	)
 {
+	BeginEvent(L"Average Brightness");
+
 	UINT textureSize = MinPower2(renderTargetWidth, renderTargetHeight);
 
 	m_pContext->ClearState();
@@ -357,6 +385,8 @@ float ToneMapping::CalculateAverageBrightness(
 
 	m_pContext->Unmap(m_pExposureDstTexture, 0);
 
+	EndEvent();
+
 	return expf(averageBrightness) - 1.0f;
 }
 
@@ -372,6 +402,8 @@ HRESULT ToneMapping::ToneMap(
 	m_mostDetailedMip = DefaineMostDetailedMip(renderTargetWidth, renderTargetHeight);
 
 	Update(CalculateAverageBrightness(pSrcTextureSRV, renderTargetWidth, renderTargetHeight), deltaTime);
+
+	BeginEvent(L"Tone Mapping");
 
 	m_pContext->ClearState();
 
@@ -406,6 +438,8 @@ HRESULT ToneMapping::ToneMap(
 	m_pContext->PSSetConstantBuffers(0, 1, &m_pExposureBuffer);
 
 	m_pContext->Draw(4, 0);
+
+	EndEvent();
 
 	return S_OK;
 }

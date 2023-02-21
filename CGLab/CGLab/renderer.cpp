@@ -561,6 +561,8 @@ HRESULT Renderer::CreateSceneResources()
 		{
 			hr = E_FAIL;
 		}
+
+		m_pToneMapping->UseAnnotations(m_pAnnotation);
 	}
 
 	return hr;
@@ -664,13 +666,13 @@ void Renderer::Render()
 {
 	Update();
 
-	m_pAnnotation->BeginEvent(L"Draw Cube");
+	m_pAnnotation->BeginEvent(L"Draw Scene");
 
 	m_pContext->ClearState();
 
 	m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
 
-	static constexpr float fillColor[4] = { 0.3f, 0.4f, 0.3f, 1.0f };
+	static constexpr float fillColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
 	m_pContext->ClearRenderTargetView(m_pBackBufferRTV, fillColor);
 	m_pContext->ClearRenderTargetView(m_pHDRTextureRTV, fillColor);
 	m_pContext->ClearDepthStencilView(m_pDepthTextureDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
@@ -744,5 +746,9 @@ void Renderer::RenderScene()
 
 void Renderer::PostProcessing()
 {
+	m_pAnnotation->BeginEvent(L"Tone Mapping");
+
 	m_pToneMapping->ToneMap(m_pHDRTextureSRV, m_pBackBufferRTV, m_windowWidth, m_windowHeight, m_timeFromLastFrame / 10e6f);
+
+	m_pAnnotation->EndEvent();
 }

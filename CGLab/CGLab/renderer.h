@@ -28,7 +28,7 @@ class Camera;
 
 static constexpr UINT MaxLightNum = 3;
 
-
+// TODO: divide into renderer and context
 class Renderer
 {
 public:
