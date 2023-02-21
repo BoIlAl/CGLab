@@ -1,12 +1,15 @@
 #pragma once
 
 #include "framework.h"
+#include "light.h"
 
+struct Vertex;
 struct IDXGIFactory;
 struct ID3D11Device;
 struct ID3D11DeviceContext;
 struct IDXGISwapChain;
 struct ID3D11RenderTargetView;
+struct ID3D11ShaderResourceView;
 struct ID3D11DepthStencilView;
 struct ID3D11RasterizerState;
 struct ID3D11DepthStencilState;
@@ -19,8 +22,13 @@ struct ID3DUserDefinedAnnotation;
 struct ID3D11Resource;
 
 class ShaderCompiler;
+class ToneMapping;
+class Camera;
 
 
+static constexpr UINT MaxLightNum = 3;
+
+// TODO: divide into renderer and context
 class Renderer
 {
 public:
@@ -34,6 +42,10 @@ public:
 	void Render();
 	bool Resize(UINT newWidth, UINT newHeight);
 
+	void ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness);
+
+	Camera* getCamera();
+
 private:
 	Renderer();
 
@@ -43,11 +55,19 @@ private:
 	HRESULT CreateSwapChain(IDXGIFactory* pFactory, HWND hWnd);
 	HRESULT CreateBackBuffer();
 	HRESULT CreatePipelineStateObjects();
+
+	HRESULT CreateCubeResourses();
+	HRESULT CreatePlaneResourses();
+
 	HRESULT CreateSceneResources();
+
 	HRESULT SetResourceName(ID3D11Resource* pResource, const std::string& name);
 
 	void Update();
 	void RenderScene();
+	void PostProcessing();
+
+	void FillLightBuffer();
 
 private:
 	static constexpr UINT s_swapChainBuffersNum = 2u;
@@ -56,8 +76,6 @@ private:
 	static constexpr FLOAT s_near = 0.001f;
 	static constexpr FLOAT s_far = 1000.0f;
 	static constexpr FLOAT s_fov = s_PI / 2.0f;
-
-	static constexpr FLOAT s_cameraPosition[3] = { 0.0f, 0.0f, -5.0f };
 
 private:
 	ID3D11Device* m_pDevice;
@@ -68,14 +86,24 @@ private:
 	ID3D11Texture2D* m_pDepthTexture;
 	ID3D11DepthStencilView* m_pDepthTextureDSV;
 
+	ID3D11Texture2D* m_pHDRRenderTarget;
+	ID3D11RenderTargetView* m_pHDRTextureRTV;
+	ID3D11ShaderResourceView* m_pHDRTextureSRV;
+
 	ID3D11RasterizerState* m_pRasterizerState;
 	ID3D11DepthStencilState* m_pDepthStencilState;
 
-	ID3D11Buffer* m_pVertexBuffer;
-	ID3D11Buffer* m_pIndexBuffer;
-	UINT m_indexCount;
+	ID3D11Buffer* m_pCubeVertexBuffer;
+	ID3D11Buffer* m_pCubeIndexBuffer;
+	UINT m_cubeIndexCount;
 
-	ID3D11Buffer* m_pConstantBuffer;
+	ID3D11Buffer* m_pPlaneVertexBuffer;
+	ID3D11Buffer* m_pPlaneIndexBuffer;
+	UINT m_planeIndexCount;
+
+	ID3D11Buffer* m_pCubeConstantBuffer;
+	ID3D11Buffer* m_pPlaneConstantBuffer;
+	ID3D11Buffer* m_pLightBuffer;
 
 	ID3D11VertexShader* m_pVertexShader;
 	ID3D11PixelShader* m_pPixelShader;
@@ -91,7 +119,14 @@ private:
 
 	size_t m_startTime;
 	size_t m_currentTime;
+	size_t m_timeFromLastFrame;
+
+	Camera* m_pCamera;
 
 	bool m_isDebug;
+
+	ToneMapping* m_pToneMapping;
+
+	std::vector<PointLight> m_lights;
 };
 

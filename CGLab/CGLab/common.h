@@ -52,3 +52,27 @@ inline D3D11_INPUT_ELEMENT_DESC CreateInputElementDesc(
 
 	return elemDesc;
 }
+
+inline UINT MinPower2(UINT width, UINT height)
+{
+	UINT min = width > height ? height : width;
+	UINT n = 1;
+	for (; n <= min; n <<= 1) {}
+	return n >> 1;
+}
+
+inline bool IsPowerOf2(UINT x)
+{
+	return (x & (x - 1)) == 0;
+}
+
+inline UINT GetPowerOf2(UINT x)
+{
+	UINT res = 0;
+	while (x >>= 1)
+	{
+		++res;
+	}
+
+	return res;
+}

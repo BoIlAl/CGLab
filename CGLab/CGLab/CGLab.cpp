@@ -3,7 +3,7 @@
 
 #include "framework.h"
 #include "CGLab.h"
-#include "renderer.h"
+#include "app.h"
 
 #define MAX_LOADSTRING 100
 
@@ -19,7 +19,7 @@ LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
 HWND g_hWnd;
-Renderer* g_pRenderer;
+App* g_pAppl;
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
@@ -46,9 +46,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
     MSG msg;
 
-    g_pRenderer = Renderer::CreateRenderer(g_hWnd);
+    g_pAppl = App::CreateAppl(g_hWnd);
 
-    if (g_pRenderer == nullptr)
+    if (g_pAppl == nullptr)
     {
         return -1;
     }
@@ -68,10 +68,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
         isExitNeed = (msg.message == WM_QUIT);
 
-        g_pRenderer->Render();
+        g_pAppl->Render();
     }
 
-    Renderer::DeleterRenderer(g_pRenderer);
+    App::DeleteAppl(g_pAppl);
 
     return (int) msg.wParam;
 }
@@ -150,16 +150,46 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
     case WM_SIZE:
         {
-            if (g_pRenderer != nullptr)
+            if (g_pAppl != nullptr)
             {
-                if (!g_pRenderer->Resize(LOWORD(lParam), HIWORD(lParam)))
+                if (!g_pAppl->Resize(LOWORD(lParam), HIWORD(lParam)))
                 {
                     DestroyWindow(hWnd);
                 }
             }
         }
         break;
-
+    case WM_KEYDOWN:
+        {
+        switch (wParam)
+        {
+        case VK_UP:
+            g_pAppl->VerticalArrowHandle(true);
+            break;
+        case VK_DOWN:
+            g_pAppl->VerticalArrowHandle(false);
+            break;
+        case VK_LEFT:
+            g_pAppl->HorizontalArrowHandle(true);
+            break;
+        case VK_RIGHT:
+            g_pAppl->HorizontalArrowHandle(false);
+            break;
+        case VK_ADD:
+            g_pAppl->NextLightBrightness();
+            break;
+        }
+        }
+        break;
+    case WM_LBUTTONDOWN:
+        g_pAppl->MouseLButtonPressHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        break;
+    case WM_MOUSEMOVE:
+        g_pAppl->MouseMovementHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        break;
+    case WM_LBUTTONUP:
+        g_pAppl->MouseLButtonUpHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        break;
     case WM_COMMAND:
         {
             int wmId = LOWORD(wParam);
