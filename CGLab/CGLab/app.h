@@ -3,7 +3,12 @@
 
 class Renderer;
 
-class App {
+
+class App
+{
+public:
+	static constexpr UINT MaxWindowSize = 2048u;
+
 public:
 	static App* CreateAppl(HWND hWnd);
 	static void DeleteAppl(App*& pAppl);

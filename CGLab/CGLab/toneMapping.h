@@ -20,7 +20,7 @@ class ToneMapping
 {
 public:
 	static ToneMapping* CreateToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, 
-									      ShaderCompiler* pShaderCompiler, UINT windowWidth, UINT windowHeight);
+									      ShaderCompiler* pShaderCompiler, UINT maxWindowSize);
 
 	~ToneMapping();
 
@@ -33,7 +33,7 @@ public:
 	);
 
 private:
-	ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT windowWidth, UINT windowHeight);
+	ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT maxWindowSize);
 
 	HRESULT CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler);
 	HRESULT CreateResources();
@@ -46,6 +46,8 @@ private:
 		ID3D11ShaderResourceView* pSrcTextureSRV,
 		UINT renderTargetWidth,
 		UINT renderTargetHeight);
+
+	UINT DefaineMostDetailedMip(UINT width, UINT height) const;
 
 private:
 	ID3D11Device* m_pDevice;
@@ -69,7 +71,9 @@ private:
 	ID3D11PixelShader* m_pDownSamplePS;
 
 	UINT m_textureSize;
+	UINT m_mipsNum;
+	UINT m_mostDetailedMip;
 
 	ID3D11Buffer* m_pExposureBuffer;
-	FLOAT m_adaptedExposure;
+	FLOAT m_adaptedBrightness;
 };

@@ -13,15 +13,15 @@ struct ExposureBuffer
 };
 
 ToneMapping* ToneMapping::CreateToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, 
-											ShaderCompiler* pShaderCompiler, UINT windowWidth, UINT windowHeight)
+											ShaderCompiler* pShaderCompiler, UINT maxWindowSize)
 {
-	ToneMapping* pToneMapping = new ToneMapping(pDevice, pContext, windowWidth, windowHeight);
+	ToneMapping* pToneMapping = new ToneMapping(pDevice, pContext, maxWindowSize);
 
 	HRESULT hr = pToneMapping->CreatePipelineStateObjects(pShaderCompiler);
 
 	if (SUCCEEDED(hr))
 	{
-		pToneMapping->CreateResources();
+		hr = pToneMapping->CreateResources();
 	}
 
 	if (SUCCEEDED(hr))
@@ -35,7 +35,7 @@ ToneMapping* ToneMapping::CreateToneMapping(ID3D11Device* pDevice, ID3D11DeviceC
 }
 
 
-ToneMapping::ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT windowWidth, UINT windowHeight)
+ToneMapping::ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT maxWindowSize)
 	: m_pDevice(pDevice)
 	, m_pContext(pContext)
 	, m_pRasterizerState(nullptr)
@@ -43,8 +43,10 @@ ToneMapping::ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, U
 	, m_pToneMappingVS(nullptr)
 	, m_pToneMappingPS(nullptr)
 	, m_pExposureBuffer(nullptr)
-	, m_adaptedExposure(1.0f)
-	, m_textureSize(MinPower2(windowWidth, windowHeight))
+	, m_adaptedBrightness(1.0f)
+	, m_textureSize(MinPower2(maxWindowSize, maxWindowSize))
+	, m_mipsNum(GetPowerOf2(m_textureSize))
+	, m_mostDetailedMip(0)
 	, m_pExposureTexture(nullptr)
 	, m_pAverageBrightnessVS(nullptr)
 	, m_pAverageBrightnessPS(nullptr)
@@ -181,7 +183,7 @@ HRESULT ToneMapping::CreateResources()
 		exposureDesc.Usage = D3D11_USAGE_DEFAULT;
 		exposureDesc.CPUAccessFlags = 0;
 		exposureDesc.ArraySize = 1;
-		exposureDesc.MipLevels = 0;
+		exposureDesc.MipLevels = m_mipsNum + 1;
 		exposureDesc.SampleDesc.Count = 1;
 		exposureDesc.SampleDesc.Quality = 0;
 
@@ -198,7 +200,7 @@ HRESULT ToneMapping::CreateResources()
 		exposureDstDesc.Usage = D3D11_USAGE_STAGING;
 		exposureDstDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
 		exposureDstDesc.ArraySize = 1;
-		exposureDstDesc.MipLevels = 0;
+		exposureDstDesc.MipLevels = 1;
 		exposureDstDesc.SampleDesc.Count = 1;
 		exposureDstDesc.SampleDesc.Quality = 0;
 
@@ -258,16 +260,27 @@ HRESULT ToneMapping::CreateResources()
 
 FLOAT ToneMapping::EyeAdaptation(FLOAT currentExposure, FLOAT deltaTime) const
 {
-	return m_adaptedExposure + (currentExposure - m_adaptedExposure) * (1 - expf(-deltaTime));
+	return m_adaptedBrightness + (currentExposure - m_adaptedBrightness) * (1 - expf(-deltaTime));
+}
+
+
+UINT ToneMapping::DefaineMostDetailedMip(UINT width, UINT height) const
+{
+	UINT textureSize = MinPower2(width, height);
+	UINT pow2 = GetPowerOf2(textureSize);
+
+	assert(pow2 <= m_mipsNum);
+
+	return m_mipsNum - pow2;
 }
 
 
 void ToneMapping::Update(FLOAT averageBrightness, FLOAT deltaTime)
 {
-	m_adaptedExposure = EyeAdaptation(averageBrightness, deltaTime);
+	m_adaptedBrightness = EyeAdaptation(averageBrightness, deltaTime);
 
 	static ExposureBuffer exposureBuffer = {};
-	exposureBuffer.exposure = { (1.03f - (2.0f / (2 + log10f(m_adaptedExposure + 1)))) / averageBrightness, 0.0f, 0.0f, 0.0f };
+	exposureBuffer.exposure = { (1.03f - (2.0f / (2 + log10f(m_adaptedBrightness + 1)))) / averageBrightness, 0.0f, 0.0f, 0.0f };
 
 	m_pContext->UpdateSubresource(m_pExposureBuffer, 0, nullptr, &exposureBuffer, 0, 0);
 }
@@ -278,23 +291,25 @@ float ToneMapping::CalculateAverageBrightness(
 	UINT renderTargetHeight
 	)
 {
+	UINT textureSize = MinPower2(renderTargetWidth, renderTargetHeight);
+
 	m_pContext->ClearState();
 
-	m_pContext->OMSetRenderTargets(1, &m_exposureTextureRTVs[0], nullptr);
+	m_pContext->OMSetRenderTargets(1, &m_exposureTextureRTVs[m_mostDetailedMip], nullptr);
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftY = 0;
 	viewport.TopLeftX = 0;
-	viewport.Width = (FLOAT)m_textureSize;
-	viewport.Height = (FLOAT)m_textureSize;
+	viewport.Width = (FLOAT)textureSize;
+	viewport.Height = (FLOAT)textureSize;
 	viewport.MinDepth = 0;
 	viewport.MaxDepth = 1;
 
 	D3D11_RECT rect = {};
 	rect.left = 0;
 	rect.top = 0;
-	rect.right = m_textureSize;
-	rect.bottom = m_textureSize;
+	rect.right = textureSize;
+	rect.bottom = textureSize;
 
 	m_pContext->RSSetViewports(1, &viewport);
 	m_pContext->RSSetScissorRects(1, &rect);
@@ -314,9 +329,9 @@ float ToneMapping::CalculateAverageBrightness(
 	m_pContext->VSSetShader(m_pDownSampleVS, nullptr, 0);
 	m_pContext->PSSetShader(m_pDownSamplePS, nullptr, 0);
 
-	UINT i = 0;
+	UINT i = m_mostDetailedMip;
 
-	for (UINT n = m_textureSize >> 1; n > 0; n >>= 1, ++i)
+	for (UINT n = textureSize >> 1; n > 0; n >>= 1, ++i)
 	{
 		viewport.Width = (FLOAT)n;
 		viewport.Height = (FLOAT)n;
@@ -354,6 +369,8 @@ HRESULT ToneMapping::ToneMap(
 	FLOAT deltaTime
 )
 {
+	m_mostDetailedMip = DefaineMostDetailedMip(renderTargetWidth, renderTargetHeight);
+
 	Update(CalculateAverageBrightness(pSrcTextureSRV, renderTargetWidth, renderTargetHeight), deltaTime);
 
 	m_pContext->ClearState();

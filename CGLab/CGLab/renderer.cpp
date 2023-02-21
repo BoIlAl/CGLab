@@ -11,7 +11,8 @@
 #include "shaderCompiler.h"
 #include "common.h"
 #include "toneMapping.h"
-#include "Camera.h"
+#include "camera.h"
+#include "app.h"
 
 
 struct Vertex
@@ -536,9 +537,9 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		m_lights.push_back(PointLight({ -4.0f, 0.0f, 0.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
-		m_lights.push_back(PointLight({ 4.0f, 0.0f, -4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
-		m_lights.push_back(PointLight({ 0.0f, 0.0f, 4.0f },		{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ -4.0f, -0.25f, 0.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
 
 		LightBuffer lightBuffer = {};
 		lightBuffer.lightsCount.x = (UINT)m_lights.size();
@@ -554,7 +555,7 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
-		m_pToneMapping = ToneMapping::CreateToneMapping(m_pDevice, m_pContext, m_pShaderCompiler, m_windowWidth, m_windowHeight);
+		m_pToneMapping = ToneMapping::CreateToneMapping(m_pDevice, m_pContext, m_pShaderCompiler, App::MaxWindowSize);
 
 		if (m_pToneMapping == nullptr)
 		{
