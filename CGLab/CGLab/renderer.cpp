@@ -746,7 +746,7 @@ void Renderer::RenderScene()
 
 void Renderer::PostProcessing()
 {
-	m_pAnnotation->BeginEvent(L"Tone Mapping");
+	m_pAnnotation->BeginEvent(L"Post Processing");
 
 	m_pToneMapping->ToneMap(m_pHDRTextureSRV, m_pBackBufferRTV, m_windowWidth, m_windowHeight, m_timeFromLastFrame / 10e6f);
 

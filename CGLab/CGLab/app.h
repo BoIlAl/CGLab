@@ -18,7 +18,10 @@ public:
 
 	void VerticalArrowHandle(bool isUpArrow);
 	void HorizontalArrowHandle(bool isLeftArrow);
-
+	void XHandle();
+	void ZHandle();
+	
+	void MouseWheel(int delta);
 	void MouseLButtonPressHandle(int x, int y);
 	void MouseMovementHandle(int x, int y);
 	void MouseLButtonUpHandle(int x, int y);
@@ -31,7 +34,10 @@ private:
 private:
 	int m_xMouse, m_yMouse;
 	bool m_isPressed;
-	const float deltaMovement = 0.2f;
-	const float deltaRotate = 0.002f;
+
+	static constexpr float m_deltaMovement = 0.2f;
+	static constexpr float m_deltaRotate = 0.002f;
+	static constexpr float m_deltaZoom = 0.002f;
+
 	std::unique_ptr<Renderer, std::_Mem_fn<void(Renderer::*)()>> m_pRenderer;
 };
