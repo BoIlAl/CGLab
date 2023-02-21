@@ -43,7 +43,7 @@ VSOut VS(VSIn input)
     output.worldPosition = mul(float4(input.position, 1.0f), modelMatrix);
     output.position = mul(output.worldPosition, vpMatrix);
     output.color = input.color;
-    output.worldNormal = mul(float4(input.normal, 0.0f), modelMatrix).xyz;
+    output.worldNormal = normalize(mul(float4(input.normal, 0.0f), modelMatrix).xyz);
     
     return output;
 }
