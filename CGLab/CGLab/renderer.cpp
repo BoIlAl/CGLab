@@ -50,7 +50,7 @@ Renderer* Renderer::CreateRenderer(HWND hWnd)
 	return nullptr;
 }
 
-void Renderer::DeleterRenderer(Renderer*& pRenderer)
+void Renderer::DeleteRenderer(Renderer*& pRenderer)
 {
 	if (pRenderer != nullptr)
 	{
@@ -202,7 +202,6 @@ void Renderer::Release()
 			SafeRelease(pDebug);
 		}
 	}
-
 }
 
 

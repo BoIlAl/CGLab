@@ -89,10 +89,7 @@ DirectX::FXMVECTOR Camera::CalcProjectedDir() const
 
 DirectX::XMMATRIX Camera::GetViewMatrix() const
 {
-	DirectX::FXMVECTOR viewDir = m_eye;
-	DirectX::FXMVECTOR eye = DirectX::XMVectorSubtract(m_eye, m_viewDir);
-
-	return DirectX::XMMatrixLookAtLH(eye, viewDir, m_up);
+	return DirectX::XMMatrixLookToLH(m_eye, m_viewDir, m_up);
 }
 
 Camera::~Camera()

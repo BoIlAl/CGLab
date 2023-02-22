@@ -33,7 +33,7 @@ class Renderer
 {
 public:
 	static Renderer* CreateRenderer(HWND hWnd);
-	static void DeleterRenderer(Renderer*& pRenderer);
+	static void DeleteRenderer(Renderer*& pRenderer);
 
 	void Release();
 

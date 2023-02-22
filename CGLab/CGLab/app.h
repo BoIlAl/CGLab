@@ -1,8 +1,7 @@
 #pragma once
 #include "framework.h"
-
-class Renderer;
-
+#include "renderer.h"
+#include "camera.h"
 
 class App
 {
@@ -39,5 +38,13 @@ private:
 	static constexpr float m_deltaRotate = 0.002f;
 	static constexpr float m_deltaZoom = 0.002f;
 
-	std::unique_ptr<Renderer, std::_Mem_fn<void(Renderer::*)()>> m_pRenderer;
+	struct Deleter
+	{
+		void operator()(Renderer*& pRenderer)
+		{
+			Renderer::DeleteRenderer(pRenderer);
+		}
+	};
+
+	std::unique_ptr<Renderer, Deleter> m_pRenderer;
 };

@@ -1,6 +1,4 @@
 #include "app.h"
-#include "renderer.h"
-#include "camera.h"
 
 App* App::CreateAppl(HWND hWnd)
 {
@@ -96,7 +94,7 @@ void App::NextLightBrightness()
 
 
 App::App(HWND hWnd) 
-	: m_pRenderer(nullptr, std::mem_fn(&Renderer::Release))
+	: m_pRenderer(nullptr)
 	, m_isPressed(false)
 	, m_xMouse(0)
 	, m_yMouse(0)
