@@ -81,8 +81,12 @@ Renderer::Renderer()
 	, m_pPlaneVertexBuffer(nullptr)
 	, m_pPlaneIndexBuffer(nullptr)
 	, m_planeIndexCount(0)
+	, m_pSphereVertexBuffer(nullptr)
+	, m_pSphereIndexBuffer(nullptr)
+	, m_sphereIndexCount(0)
 	, m_pCubeConstantBuffer(nullptr)
 	, m_pPlaneConstantBuffer(nullptr)
+	, m_pSphereConstantBuffer(nullptr)
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
 	, m_pInputLayout(nullptr)
@@ -173,6 +177,9 @@ void Renderer::Release()
 	SafeRelease(m_pPlaneIndexBuffer);
 	SafeRelease(m_pPlaneVertexBuffer);
 	SafeRelease(m_pCubeConstantBuffer);
+	SafeRelease(m_pSphereIndexBuffer);
+	SafeRelease(m_pSphereVertexBuffer);
+	SafeRelease(m_pSphereConstantBuffer);
 	SafeRelease(m_pPlaneConstantBuffer);
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerState);
@@ -515,12 +522,78 @@ HRESULT Renderer::CreatePlaneResourses()
 	return hr;
 }
 
+HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands)
+{
+	std::vector<Vertex> vertices;
+	std::vector<UINT16> indices;
+
+	for (UINT16 latNumber = 0; latNumber <= latitudeBands; ++latNumber)
+	{
+		float theta = latNumber * PI / latitudeBands;
+		float sinTheta = sin(theta);
+		float cosTheta = cos(theta);
+
+		for (UINT16 longNumber = 0; longNumber <= longitudeBands; ++longNumber)
+		{
+			float phi = longNumber * 2 * PI / longitudeBands;
+			float sinPhi = sin(phi);
+			float cosPhi = cos(phi);
+
+			float normalX = cosPhi * sinTheta;
+			float normalY = cosTheta;
+			float normalZ = sinPhi * sinTheta;
+
+			Vertex vs = { { normalX, normalY, normalZ },	
+						  { 0.5f, 0.1f, 0.1f, 1.0f },	
+				          { normalX, normalY, normalZ } };
+
+			vertices.push_back(vs);
+		}
+	}
+
+	for (UINT16 latNumber = 0; latNumber < latitudeBands; ++latNumber)
+	{
+		for (UINT16 longNumber = 0; longNumber < longitudeBands; ++longNumber)
+		{
+			UINT16 first = (latNumber * (longitudeBands + 1)) + longNumber;
+			UINT16 second = first + longitudeBands + 1;
+
+			indices.push_back(first);
+			indices.push_back(second);
+			indices.push_back(first + 1);
+
+			indices.push_back(second);
+			indices.push_back(second + 1);
+			indices.push_back(first + 1);
+		}
+	}
+
+	m_sphereIndexCount = (UINT)indices.size();
+	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc((UINT)vertices.size() * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
+	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(vertices.data());
+
+	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &m_pSphereVertexBuffer);
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(m_sphereIndexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
+		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(indices.data());
+		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pSphereIndexBuffer);
+	}
+	return hr;
+}
+
 HRESULT Renderer::CreateSceneResources()
 {
 	HRESULT hr = CreateCubeResourses();
+
 	if (SUCCEEDED(hr))
 	{
 		hr = CreatePlaneResourses();
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = CreateSphereResourses(30, 30);
 	}
 
 	if (SUCCEEDED(hr))
@@ -535,6 +608,13 @@ HRESULT Renderer::CreateSceneResources()
 		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
 		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pPlaneConstantBuffer);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pSphereConstantBuffer);
 	}
 
 	if (SUCCEEDED(hr))
@@ -742,8 +822,9 @@ void Renderer::Update()
 	FLOAT width = s_near / tanf(s_fov / 2.0f);
 	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
 
-	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(s_PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
+	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
 	DirectX::XMMATRIX modelPlaneMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
+	DirectX::XMMATRIX modelSphereMatrix = DirectX::XMMatrixTranslation(7.5f, 0.0f, 0.0f);
 	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
 	DirectX::XMMATRIX viewMatrix = m_pCamera->GetViewMatrix();
 
@@ -756,6 +837,10 @@ void Renderer::Update()
 	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix));
 	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
 	m_pContext->UpdateSubresource(m_pPlaneConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+
+	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelSphereMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
+	m_pContext->UpdateSubresource(m_pSphereConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 }
 
 
@@ -816,7 +901,6 @@ void Renderer::RenderScene()
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-
 	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 	m_pContext->IASetIndexBuffer(m_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
@@ -826,7 +910,6 @@ void Renderer::RenderScene()
 	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 
 	m_pContext->DrawIndexed(m_cubeIndexCount, 0, 0);
-
 
 	ID3D11Buffer* vertexBuffers1[1] = { m_pPlaneVertexBuffer };
 
@@ -839,6 +922,18 @@ void Renderer::RenderScene()
 	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers1);
 
 	m_pContext->DrawIndexed(m_planeIndexCount, 0, 0);
+
+	ID3D11Buffer* vertexBuffers2[1] = { m_pSphereVertexBuffer };
+
+	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers2, &stride, &offset);
+	m_pContext->IASetIndexBuffer(m_pSphereIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+	ID3D11Buffer* constantBuffers2[] = { m_pSphereConstantBuffer, m_pLightBuffer };
+
+	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers2);
+	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers2);
+
+	m_pContext->DrawIndexed(m_sphereIndexCount, 0, 0);
 }
 
 void Renderer::PostProcessing()

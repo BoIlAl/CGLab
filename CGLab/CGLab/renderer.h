@@ -58,6 +58,7 @@ private:
 
 	HRESULT CreateCubeResourses();
 	HRESULT CreatePlaneResourses();
+	HRESULT CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands);
 
 	HRESULT CreateSceneResources();
 
@@ -77,11 +78,10 @@ private:
 
 private:
 	static constexpr UINT s_swapChainBuffersNum = 2u;
-	static constexpr FLOAT s_PI = 3.14159265359f;
 
 	static constexpr FLOAT s_near = 0.001f;
 	static constexpr FLOAT s_far = 1000.0f;
-	static constexpr FLOAT s_fov = s_PI / 2.0f;
+	static constexpr FLOAT s_fov = PI / 2.0f;
 
 private:
 	ID3D11Device* m_pDevice;
@@ -107,8 +107,13 @@ private:
 	ID3D11Buffer* m_pPlaneIndexBuffer;
 	UINT m_planeIndexCount;
 
+	ID3D11Buffer* m_pSphereVertexBuffer;
+	ID3D11Buffer* m_pSphereIndexBuffer;
+	UINT m_sphereIndexCount;
+
 	ID3D11Buffer* m_pCubeConstantBuffer;
 	ID3D11Buffer* m_pPlaneConstantBuffer;
+	ID3D11Buffer* m_pSphereConstantBuffer;
 	ID3D11Buffer* m_pLightBuffer;
 
 	ID3D11VertexShader* m_pVertexShader;
