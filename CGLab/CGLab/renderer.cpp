@@ -1,5 +1,3 @@
-#include "renderer.h"
-
 #include <d3d11.h>
 #include <d3d11_1.h>
 #include <dxgi.h>
@@ -10,8 +8,9 @@
 
 #include "WICTextureLoader.h"
 
+#include "renderer.h"
+
 #include "shaderCompiler.h"
-#include "common.h"
 #include "toneMapping.h"
 #include "camera.h"
 #include "app.h"

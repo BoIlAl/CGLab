@@ -2,6 +2,7 @@
 
 #include "framework.h"
 #include "light.h"
+#include "common.h"
 
 struct Vertex;
 struct IDXGIFactory;
