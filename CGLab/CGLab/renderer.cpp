@@ -8,6 +8,8 @@
 #include <cmath>
 #include <chrono>
 
+#include "WICTextureLoader.h"
+
 #include "shaderCompiler.h"
 #include "common.h"
 #include "toneMapping.h"
@@ -84,6 +86,8 @@ Renderer::Renderer()
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
 	, m_pInputLayout(nullptr)
+	, m_pEnvironmentCubeMap(nullptr)
+	, m_pEnvironmentCubeMapSRV(nullptr)
 	, m_windowWidth(0)
 	, m_windowHeight(0)
 	, m_pShaderCompiler(nullptr)
@@ -158,6 +162,8 @@ bool Renderer::Init(HWND hWnd)
 
 void Renderer::Release()
 {
+	SafeRelease(m_pEnvironmentCubeMapSRV);
+	SafeRelease(m_pEnvironmentCubeMap);
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
@@ -511,7 +517,6 @@ HRESULT Renderer::CreatePlaneResourses()
 
 HRESULT Renderer::CreateSceneResources()
 {
-
 	HRESULT hr = CreateCubeResourses();
 	if (SUCCEEDED(hr))
 	{
@@ -564,6 +569,11 @@ HRESULT Renderer::CreateSceneResources()
 		m_pToneMapping->UseAnnotations(m_pAnnotation);
 	}
 
+	if (SUCCEEDED(hr))
+	{
+		hr = LoadTextureCube("data/maskonaive", &m_pEnvironmentCubeMap, &m_pEnvironmentCubeMapSRV);
+	}
+
 	return hr;
 }
 
@@ -574,6 +584,94 @@ HRESULT Renderer::SetResourceName(ID3D11Resource* pResource, const std::string& 
 		return E_FAIL;
 	}
 	return pResource->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)name.size(), name.c_str());
+}
+
+HRESULT Renderer::LoadTextureCube(
+	const std::string& pathToCubeSrc,
+	ID3D11Texture2D** ppTextureCube,
+	ID3D11ShaderResourceView** ppTextureCubeSRV
+)
+{
+	static std::string edges[6] = { "posx", "negx", "posy", "negy", "posz", "negz" };
+	HRESULT hr = S_OK;
+
+	ID3D11Texture2D* pSrcTexture = nullptr;
+
+	if (SUCCEEDED(hr))
+	{
+		std::string edgeName = pathToCubeSrc + "/" + edges[0] + ".jpg";
+		std::wstring wEdgeName(edgeName.begin(), edgeName.end());
+
+		hr = CreateWICTextureFromFile(m_pDevice, m_pContext, wEdgeName.c_str(), (ID3D11Resource**)&pSrcTexture, nullptr);
+	}
+
+	D3D11_TEXTURE2D_DESC cubeMapDesc = {};
+	if (SUCCEEDED(hr))
+	{
+		D3D11_TEXTURE2D_DESC srcTextureDesc = {};
+		pSrcTexture->GetDesc(&srcTextureDesc);
+
+		cubeMapDesc.Width = srcTextureDesc.Width;
+		cubeMapDesc.Height = srcTextureDesc.Height;
+		cubeMapDesc.Format = srcTextureDesc.Format;
+		cubeMapDesc.MipLevels = 1;
+		cubeMapDesc.ArraySize = 6;
+		cubeMapDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
+		cubeMapDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+		cubeMapDesc.CPUAccessFlags = 0;
+		cubeMapDesc.SampleDesc.Count = 1;
+		cubeMapDesc.SampleDesc.Quality = 0;
+
+		hr = m_pDevice->CreateTexture2D(&cubeMapDesc, nullptr, ppTextureCube);
+	}
+
+	if (SUCCEEDED(hr) && ppTextureCubeSRV != nullptr)
+	{
+		hr = m_pDevice->CreateShaderResourceView(*ppTextureCube, nullptr, ppTextureCubeSRV);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pContext->CopySubresourceRegion(*ppTextureCube, 0, 0, 0, 0, pSrcTexture, 0, nullptr);
+	}
+
+	SafeRelease(pSrcTexture);
+
+	for (UINT i = 1; i < _countof(edges) && SUCCEEDED(hr); ++i)
+	{
+		std::string edgeName = pathToCubeSrc + "/" + edges[i] + ".jpg";
+		std::wstring wEdgeName(edgeName.begin(), edgeName.end());
+
+		hr = CreateWICTextureFromFile(m_pDevice, m_pContext, wEdgeName.c_str(), (ID3D11Resource**)&pSrcTexture, nullptr);
+
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		if (m_isDebug)
+		{
+			D3D11_TEXTURE2D_DESC srcTextureDesc = {};
+			pSrcTexture->GetDesc(&srcTextureDesc);
+
+			if (srcTextureDesc.Width != cubeMapDesc.Width
+				|| srcTextureDesc.Height != cubeMapDesc.Height
+				|| srcTextureDesc.Format != cubeMapDesc.Format)
+			{
+				hr = E_FAIL;
+				break;
+			}
+		}
+
+		m_pContext->CopySubresourceRegion(*ppTextureCube, i, 0, 0, 0, pSrcTexture, 0, nullptr);
+
+		SafeRelease(pSrcTexture);
+	}
+
+	SafeRelease(pSrcTexture);
+
+	return hr;
 }
 
 

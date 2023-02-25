@@ -63,6 +63,12 @@ private:
 
 	HRESULT SetResourceName(ID3D11Resource* pResource, const std::string& name);
 
+	HRESULT LoadTextureCube(
+		const std::string& pathToCubeSrc,
+		ID3D11Texture2D** ppTextureCube,
+		ID3D11ShaderResourceView** ppTextureCubeSRV
+	);
+
 	void Update();
 	void RenderScene();
 	void PostProcessing();
@@ -109,6 +115,9 @@ private:
 	ID3D11PixelShader* m_pPixelShader;
 
 	ID3D11InputLayout* m_pInputLayout;
+
+	ID3D11Texture2D* m_pEnvironmentCubeMap;
+	ID3D11ShaderResourceView* m_pEnvironmentCubeMapSRV;
 
 	UINT m_windowWidth;
 	UINT m_windowHeight;

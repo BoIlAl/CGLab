@@ -96,6 +96,7 @@
     <ClInclude Include="shaderCompiler.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="toneMapping.h" />
+    <ClInclude Include="WICTextureLoader.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="app.cpp" />
@@ -105,6 +106,7 @@
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="shaderCompiler.cpp" />
     <ClCompile Include="toneMapping.cpp" />
+    <ClCompile Include="WICTextureLoader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="CGLab.rc" />
@@ -135,6 +137,11 @@
       <FileType>Document</FileType>
     </None>
     <None Include="shaders\downSample.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\environment.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>
