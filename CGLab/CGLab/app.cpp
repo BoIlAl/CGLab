@@ -89,7 +89,7 @@ void App::NextLightBrightness()
 
 	curIdx = (curIdx + 1u) % (UINT)_countof(brightness);
 
-	m_pRenderer->ChangeLightBrightness(2, brightness[curIdx]);
+	m_pRenderer->ChangeLightBrightness(0, brightness[curIdx]);
 }
 
 

@@ -147,6 +147,8 @@ private:
 	ID3D11Texture2D* m_pEnvironmentCubeMap;
 	ID3D11ShaderResourceView* m_pEnvironmentCubeMapSRV;
 
+	ID3D11Buffer* m_pPBRBuffer;
+
 	UINT m_windowWidth;
 	UINT m_windowHeight;
 

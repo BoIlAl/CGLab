@@ -20,6 +20,7 @@ struct ConstantBuffer
 {
 	DirectX::XMFLOAT4X4 modelMatrix;
 	DirectX::XMFLOAT4X4 vpMatrix;
+	DirectX::XMFLOAT4 cameraPosition;
 };
 
 struct LightBuffer
@@ -28,6 +29,11 @@ struct LightBuffer
 	PointLight lights[MaxLightNum];
 };
 
+struct PBRBuffer
+{
+	DirectX::XMFLOAT4 albedo;
+	DirectX::XMFLOAT4 roughnessMetalness; // r - roughness, g - metalness
+};
 
 
 Renderer* Renderer::CreateRenderer(HWND hWnd)
@@ -556,11 +562,11 @@ HRESULT Renderer::CreateSphereBuffers(
 			UINT16 second = first + longitudeBands + 1;
 
 			indices.push_back(first);
-			indices.push_back(second);
 			indices.push_back(first + 1);
-
 			indices.push_back(second);
+
 			indices.push_back(second + 1);
+			indices.push_back(second);
 			indices.push_back(first + 1);
 		}
 	}
@@ -616,11 +622,29 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
+		D3D11_BUFFER_DESC pbrBufferDesc = CreateDefaultBufferDesc(sizeof(PBRBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		PBRBuffer pbrBuffer = {};
+		pbrBuffer.albedo = { 1.0f, 0.71f, 0.29f, 1.0f };
+		pbrBuffer.roughnessMetalness = { 0.1f, 0.1f, 0.0f, 0.0f };
+
+		D3D11_SUBRESOURCE_DATA pbrBufferData = {};
+		pbrBufferData.pSysMem = &pbrBuffer;
+		pbrBufferData.SysMemPitch = 0;
+		pbrBufferData.SysMemSlicePitch = 0;
+
+		hr = m_pDevice->CreateBuffer(&pbrBufferDesc, &pbrBufferData, &m_pPBRBuffer);
+	}
+
+	if (SUCCEEDED(hr))
+	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		m_lights.push_back(PointLight({ -4.0f, -0.25f, 0.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
-		m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
-		m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ 0.0f, 1.0f, -7.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+
+		//m_lights.push_back(PointLight({ -4.0f, -0.25f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		//m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		//m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
 
 		LightBuffer lightBuffer = {};
 		lightBuffer.lightsCount.x = (UINT)m_lights.size();
@@ -821,22 +845,21 @@ void Renderer::Update()
 
 	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
 	DirectX::XMMATRIX modelPlaneMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
-	DirectX::XMMATRIX modelSphereMatrix = DirectX::XMMatrixTranslation(7.5f, 0.0f, 0.0f);
+	DirectX::XMMATRIX modelSphereMatrix = DirectX::XMMatrixTranslation(0.0f, 1.0f, 0.0f);
 	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
 	DirectX::XMMATRIX viewMatrix = m_pCamera->GetViewMatrix();
 
 	ConstantBuffer constantBuffer = {};
+	constantBuffer.cameraPosition = m_pCamera->GetPosition();
+	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
 
 	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
 	m_pContext->UpdateSubresource(m_pCubeConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
 	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
 	m_pContext->UpdateSubresource(m_pPlaneConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
 	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelSphereMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
 	m_pContext->UpdateSubresource(m_pSphereConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 }
 
@@ -849,7 +872,8 @@ void Renderer::Render()
 
 	m_pContext->ClearState();
 
-	m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
+	//m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
+	m_pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
 
 	static constexpr float fillColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
 	m_pContext->ClearRenderTargetView(m_pBackBufferRTV, fillColor);
@@ -877,7 +901,7 @@ void Renderer::Render()
 
 	m_pAnnotation->EndEvent();
 
-	PostProcessing();
+	//PostProcessing();
 
 	m_pSwapChain->Present(0, 0);
 }
@@ -901,7 +925,7 @@ void Renderer::RenderScene()
 	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 	m_pContext->IASetIndexBuffer(m_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-	ID3D11Buffer* constantBuffers[] = { m_pCubeConstantBuffer, m_pLightBuffer };
+	ID3D11Buffer* constantBuffers[] = { m_pCubeConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
 	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
@@ -913,7 +937,7 @@ void Renderer::RenderScene()
 	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers1, &stride, &offset);
 	m_pContext->IASetIndexBuffer(m_pPlaneIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-	ID3D11Buffer* constantBuffers1[] = { m_pPlaneConstantBuffer, m_pLightBuffer };
+	ID3D11Buffer* constantBuffers1[] = { m_pPlaneConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
 	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers1);
 	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers1);
@@ -925,7 +949,7 @@ void Renderer::RenderScene()
 	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers2, &stride, &offset);
 	m_pContext->IASetIndexBuffer(m_pSphereIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-	ID3D11Buffer* constantBuffers2[] = { m_pSphereConstantBuffer, m_pLightBuffer };
+	ID3D11Buffer* constantBuffers2[] = { m_pSphereConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
 	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers2);
 	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers2);

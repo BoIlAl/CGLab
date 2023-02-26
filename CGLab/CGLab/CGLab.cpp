@@ -5,6 +5,11 @@
 #include "CGLab.h"
 #include "app.h"
 
+#define CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+#define DEBUG_NEW new(_NORMAL_BLOCK, FILE, LINE__)
+#define new DEBUG_NEW
+
 #define MAX_LOADSTRING 100
 
 // Глобальные переменные:
@@ -72,6 +77,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
     App::DeleteAppl(g_pAppl);
+
+    _CrtDumpMemoryLeaks();
 
     return (int) msg.wParam;
 }
