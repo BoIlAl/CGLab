@@ -5,9 +5,10 @@
 #include "CGLab.h"
 #include "app.h"
 
-#define CRTDBG_MAP_ALLOC
+
+#define __CRTDBG_MAP_ALLOC
 #include <crtdbg.h>
-#define DEBUG_NEW new(_NORMAL_BLOCK, FILE, LINE__)
+#define DEBUG_NEW new(_NORMAL_BLOCK, __FILE__, __LINE__)
 #define new DEBUG_NEW
 
 #define MAX_LOADSTRING 100

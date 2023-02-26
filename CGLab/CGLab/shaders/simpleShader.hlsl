@@ -138,7 +138,8 @@ float4 PS(VSOut input) : SV_TARGET
         float3 lightInpact = attenuation * lights[i].color.xyz * lights[i].brightnessScaleFactor.r;
         lightInpact *= saturate(dot(dirToLight / lengthToLight, input.worldNormal));
         
-        resultColor += BRDF(input.worldPosition.xyz, lights[i].position, input.worldNormal);
+        resultColor += BRDF(input.worldPosition.xyz, lights[i].position, input.worldNormal) * lightInpact;
+        //resultColor += lightInpact;
     }
     
     return float4(resultColor, 1.0f);

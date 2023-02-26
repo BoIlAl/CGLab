@@ -82,8 +82,22 @@ private:
 	HRESULT CreateBackBuffer();
 	HRESULT CreatePipelineStateObjects();
 
-	HRESULT CreateCubeResourses();
-	HRESULT CreatePlaneResourses();
+	struct Mesh
+	{
+		ID3D11Buffer* pVertexBuffer = nullptr;
+		ID3D11Buffer* pIndexBuffer = nullptr;
+		UINT indexCount = 0;
+		DirectX::XMMATRIX modelMatrix;
+
+		~Mesh() {
+			SafeRelease(pIndexBuffer);
+			SafeRelease(pVertexBuffer);
+		}
+	};
+
+	HRESULT CreateCubeResourses(Mesh*& cubeMesh);
+	HRESULT CreatePlaneResourses(Mesh*& planeMesh);
+	HRESULT CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh);
 
 	HRESULT CreateSceneResources();
 
@@ -118,21 +132,10 @@ private:
 	ID3D11RasterizerState* m_pRasterizerState;
 	ID3D11DepthStencilState* m_pDepthStencilState;
 
-	ID3D11Buffer* m_pCubeVertexBuffer;
-	ID3D11Buffer* m_pCubeIndexBuffer;
-	UINT m_cubeIndexCount;
+	std::vector<Mesh*> m_meshes;
 
-	ID3D11Buffer* m_pPlaneVertexBuffer;
-	ID3D11Buffer* m_pPlaneIndexBuffer;
-	UINT m_planeIndexCount;
+	ID3D11Buffer* m_pConstantBuffer;
 
-	ID3D11Buffer* m_pSphereVertexBuffer;
-	ID3D11Buffer* m_pSphereIndexBuffer;
-	UINT m_sphereIndexCount;
-
-	ID3D11Buffer* m_pCubeConstantBuffer;
-	ID3D11Buffer* m_pPlaneConstantBuffer;
-	ID3D11Buffer* m_pSphereConstantBuffer;
 	ID3D11Buffer* m_pLightBuffer;
 
 	ID3D11VertexShader* m_pVertexShader;
