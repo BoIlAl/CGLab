@@ -16,14 +16,6 @@
 #include "app.h"
 
 
-struct Vertex
-{
-	DirectX::XMFLOAT3 position;
-	DirectX::XMFLOAT4 color;
-	DirectX::XMFLOAT3 normal;
-};
-
-
 struct ConstantBuffer
 {
 	DirectX::XMFLOAT4X4 modelMatrix;
@@ -521,7 +513,13 @@ HRESULT Renderer::CreatePlaneResourses()
 	return hr;
 }
 
-HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands)
+HRESULT Renderer::CreateSphereBuffers(
+	UINT16 latitudeBands,
+	UINT16 longitudeBands,
+	ID3D11Buffer** ppVertexBuffer,
+	ID3D11Buffer** ppIndexBuffer,
+	UINT* pIndexCount
+) const
 {
 	std::vector<Vertex> vertices;
 	std::vector<UINT16> indices;
@@ -567,16 +565,16 @@ HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBa
 		}
 	}
 
-	m_sphereIndexCount = (UINT)indices.size();
+	*pIndexCount = (UINT)indices.size();
 	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc((UINT)vertices.size() * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
 	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(vertices.data());
 
-	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &m_pSphereVertexBuffer);
+	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, ppVertexBuffer);
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(m_sphereIndexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(indices.data());
-		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pSphereIndexBuffer);
+		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, ppIndexBuffer);
 	}
 	return hr;
 }
@@ -592,7 +590,7 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
-		hr = CreateSphereResourses(30, 30);
+		hr = CreateSphereBuffers(30, 30, &m_pSphereVertexBuffer, &m_pSphereIndexBuffer, &m_sphereIndexCount);
 	}
 
 	if (SUCCEEDED(hr))
@@ -669,7 +667,7 @@ HRESULT Renderer::LoadTextureCube(
 	const std::string& pathToCubeSrc,
 	ID3D11Texture2D** ppTextureCube,
 	ID3D11ShaderResourceView** ppTextureCubeSRV
-)
+) const
 {
 	static std::string edges[6] = { "posx", "negx", "posy", "negy", "posz", "negz" };
 	HRESULT hr = S_OK;

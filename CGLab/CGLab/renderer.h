@@ -29,6 +29,14 @@ class Camera;
 
 static constexpr UINT MaxLightNum = 3;
 
+struct Vertex
+{
+	DirectX::XMFLOAT3 position;
+	DirectX::XMFLOAT4 color;
+	DirectX::XMFLOAT3 normal;
+};
+
+
 // TODO: divide into renderer and context
 class Renderer
 {
@@ -46,6 +54,23 @@ public:
 	void ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness);
 
 	Camera* getCamera();
+	inline ID3D11Device* GetDevice() const { return m_pDevice; }
+	inline ID3D11DeviceContext* GetContext() const { return m_pContext; }
+
+	HRESULT CreateSphereBuffers(
+		UINT16 latitudeBands,
+		UINT16 longitudeBands,
+		ID3D11Buffer** ppVertexBuffer,
+		ID3D11Buffer** ppIndexBuffer,
+		UINT* pIndexCount
+	) const;
+
+
+	HRESULT LoadTextureCube(
+		const std::string& pathToCubeSrc,
+		ID3D11Texture2D** ppTextureCube,
+		ID3D11ShaderResourceView** ppTextureCubeSRV
+	) const;
 
 private:
 	Renderer();
@@ -59,17 +84,10 @@ private:
 
 	HRESULT CreateCubeResourses();
 	HRESULT CreatePlaneResourses();
-	HRESULT CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands);
 
 	HRESULT CreateSceneResources();
 
 	HRESULT SetResourceName(ID3D11Resource* pResource, const std::string& name);
-
-	HRESULT LoadTextureCube(
-		const std::string& pathToCubeSrc,
-		ID3D11Texture2D** ppTextureCube,
-		ID3D11ShaderResourceView** ppTextureCubeSRV
-	);
 
 	void Update();
 	void RenderScene();
@@ -122,6 +140,10 @@ private:
 
 	ID3D11InputLayout* m_pInputLayout;
 
+	ID3D11VertexShader* m_pEnvironmentVS;
+	ID3D11PixelShader* m_pEnvironmentPS;
+	ID3D11Buffer* m_pEnvironmentSphereVertexBuffer;
+	ID3D11Buffer* m_pEnvironmentSphereIndexBuffer;
 	ID3D11Texture2D* m_pEnvironmentCubeMap;
 	ID3D11ShaderResourceView* m_pEnvironmentCubeMapSRV;
 
