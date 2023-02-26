@@ -77,6 +77,7 @@ Renderer::Renderer()
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
 	, m_pInputLayout(nullptr)
+	, m_pConstantBuffer(nullptr)
 	, m_pEnvironmentCubeMap(nullptr)
 	, m_pEnvironmentCubeMapSRV(nullptr)
 	, m_windowWidth(0)
@@ -170,6 +171,7 @@ void Renderer::Release()
 	SafeRelease(m_pSwapChain);
 	SafeRelease(m_pContext);
 	SafeRelease(m_pAnnotation);
+	SafeRelease(m_pConstantBuffer);
 
 	delete m_pShaderCompiler;
 	delete m_pToneMapping;
@@ -179,8 +181,8 @@ void Renderer::Release()
 		delete m_pCamera;
 	}
 
-	for (auto mesh : m_meshes) {
-		ReleaseMesh(mesh);
+	for (auto& mesh : m_meshes) {
+		delete mesh;
 	}
 
 	if (m_isDebug) 
@@ -420,15 +422,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	return hr;
 }
 
-void Renderer::ReleaseMesh(Mesh*& mesh)
-{
-	SafeRelease(mesh->pConstantBuffer);
-	SafeRelease(mesh->pIndexBuffer);
-	SafeRelease(mesh->pVertexBuffer);
-	delete (mesh);
-}
-
-HRESULT Renderer::CreateCubeResourses(Mesh** cubeMesh)
+HRESULT Renderer::CreateCubeResourses(Mesh*& cubeMesh)
 {
 	static constexpr Vertex vertices[] = {
 		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f },	{ 0.0f, -1.0f, 0.0f } },
@@ -487,14 +481,8 @@ HRESULT Renderer::CreateCubeResourses(Mesh** cubeMesh)
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
-
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &mesh->pConstantBuffer);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		*cubeMesh = mesh;
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
+		cubeMesh = mesh;
 	}
 	else
 	{
@@ -504,7 +492,7 @@ HRESULT Renderer::CreateCubeResourses(Mesh** cubeMesh)
 	return hr;
 }
 
-HRESULT Renderer::CreatePlaneResourses(Mesh** planeMesh)
+HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 {
 	static constexpr Vertex vertices[] = {
 	{ { -0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
@@ -533,14 +521,8 @@ HRESULT Renderer::CreatePlaneResourses(Mesh** planeMesh)
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
-
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &mesh->pConstantBuffer);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		*planeMesh = mesh;
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
+		planeMesh = mesh;
 	}
 	else
 	{
@@ -549,7 +531,7 @@ HRESULT Renderer::CreatePlaneResourses(Mesh** planeMesh)
 	return hr;
 }
 
-HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh** sphereMesh)
+HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh)
 {
 	std::vector<Vertex> vertices;
 	std::vector<UINT16> indices;
@@ -611,14 +593,8 @@ HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBa
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
-
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &mesh->pConstantBuffer);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		*sphereMesh = mesh;
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(7.5f, 0.0f, 0.0f);
+		sphereMesh = mesh;
 	}
 	else
 	{
@@ -630,16 +606,32 @@ HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBa
 
 HRESULT Renderer::CreateSceneResources()
 {
-	HRESULT hr = CreateCubeResourses(&m_meshes[0]);
+	Mesh* mesh = nullptr;
+
+	HRESULT hr = CreateCubeResourses(mesh);
 
 	if (SUCCEEDED(hr))
 	{
-		hr = CreatePlaneResourses(&m_meshes[1]);
+		m_meshes.push_back(mesh);
+		hr = CreatePlaneResourses(mesh);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		hr = CreateSphereResourses(30, 30, &m_meshes[2]);
+		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_meshes.push_back(mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pConstantBuffer);
 	}
 
 	if (SUCCEEDED(hr))
@@ -847,25 +839,8 @@ void Renderer::Update()
 	FLOAT width = s_near / tanf(s_fov / 2.0f);
 	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
 
-	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
-	DirectX::XMMATRIX modelPlaneMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
-	DirectX::XMMATRIX modelSphereMatrix = DirectX::XMMatrixTranslation(7.5f, 0.0f, 0.0f);
-	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
+	m_meshes[0]->modelMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
 	DirectX::XMMATRIX viewMatrix = m_pCamera->GetViewMatrix();
-
-	ConstantBuffer constantBuffer = {};
-
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-	m_pContext->UpdateSubresource(m_meshes[0]->pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
-	
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-	m_pContext->UpdateSubresource(m_meshes[1]->pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
-
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelSphereMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-	m_pContext->UpdateSubresource(m_meshes[2]->pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 }
 
 
@@ -912,6 +887,11 @@ void Renderer::Render()
 
 void Renderer::RenderScene()
 {
+	FLOAT width = s_near / tanf(s_fov / 2.0f);
+	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
+
+	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
+
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
@@ -925,14 +905,21 @@ void Renderer::RenderScene()
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	ID3D11Buffer* constantBuffers[] = { nullptr, m_pLightBuffer };
+	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer };
 
-	for (auto mesh : m_meshes) {
+	for (auto mesh : m_meshes)
+	{
 		ID3D11Buffer* vertexBuffers[] = { mesh->pVertexBuffer };
 
 		m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 		m_pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-		constantBuffers[0] = mesh->pConstantBuffer;
+
+		ConstantBuffer constantBuffer = {};
+
+		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
+		DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * projMatrix));
+		m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+
 		m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 		m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 		m_pContext->DrawIndexed(mesh->indexCount, 0, 0);
