@@ -143,10 +143,6 @@ private:
 
 	ID3D11InputLayout* m_pInputLayout;
 
-	ID3D11VertexShader* m_pEnvironmentVS;
-	ID3D11PixelShader* m_pEnvironmentPS;
-	ID3D11Buffer* m_pEnvironmentSphereVertexBuffer;
-	ID3D11Buffer* m_pEnvironmentSphereIndexBuffer;
 	ID3D11Texture2D* m_pEnvironmentCubeMap;
 	ID3D11ShaderResourceView* m_pEnvironmentCubeMapSRV;
 

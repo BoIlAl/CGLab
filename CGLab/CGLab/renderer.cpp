@@ -78,6 +78,7 @@ Renderer::Renderer()
 	, m_pConstantBuffer(nullptr)
 	, m_pEnvironmentCubeMap(nullptr)
 	, m_pEnvironmentCubeMapSRV(nullptr)
+	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
 	, m_windowHeight(0)
 	, m_pShaderCompiler(nullptr)
@@ -128,9 +129,10 @@ bool Renderer::Init(HWND hWnd)
 		hr = CreateSceneResources();
 	}
 
+
 	bool res = SUCCEEDED(hr);
 
-	if (SUCCEEDED(hr))
+	if (res)
 	{
 		m_pCamera = new Camera();
 		if (!m_pCamera)
@@ -138,7 +140,7 @@ bool Renderer::Init(HWND hWnd)
 			res = false;
 		}
 	}
-	
+
 	if (!res)
 	{
 		Release();
@@ -146,12 +148,13 @@ bool Renderer::Init(HWND hWnd)
 
 	SafeRelease(pFactory);
 
-	return SUCCEEDED(hr);
+	return res;
 }
 
 
 void Renderer::Release()
 {
+	SafeRelease(m_pPBRBuffer);
 	SafeRelease(m_pEnvironmentCubeMapSRV);
 	SafeRelease(m_pEnvironmentCubeMap);
 	SafeRelease(m_pInputLayout);
@@ -173,13 +176,10 @@ void Renderer::Release()
 
 	delete m_pShaderCompiler;
 	delete m_pToneMapping;
+	delete m_pCamera;
 
-	if (m_pCamera != nullptr)
+	for (auto& mesh : m_meshes)
 	{
-		delete m_pCamera;
-	}
-
-	for (auto& mesh : m_meshes) {
 		delete mesh;
 	}
 
@@ -707,7 +707,7 @@ HRESULT Renderer::LoadTextureCube(
 	ID3D11ShaderResourceView** ppTextureCubeSRV
 ) const
 {
-	static std::string edges[6] = { "posx", "negx", "posy", "negy", "posz", "negz" };
+	std::string edges[6] = { "posx", "negx", "posy", "negy", "posz", "negz" };
 	HRESULT hr = S_OK;
 
 	ID3D11Texture2D* pSrcTexture = nullptr;
@@ -854,11 +854,7 @@ void Renderer::Update()
 	m_timeFromLastFrame = time - m_currentTime;
 	m_currentTime = time;
 	
-	FLOAT width = s_near / tanf(s_fov / 2.0f);
-	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
-
 	m_meshes[0]->modelMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
-	DirectX::XMMATRIX viewMatrix = m_pCamera->GetViewMatrix();
 }
 
 
