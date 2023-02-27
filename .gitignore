@@ -1,5 +1,6 @@
 *.exe
 *.pdb
+*.ini
 
 .vs/
 /CGLab/.vs

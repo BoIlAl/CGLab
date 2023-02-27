@@ -36,6 +36,8 @@ struct PBRBuffer
 {
 	DirectX::XMFLOAT4 albedo;
 	DirectX::XMFLOAT4 roughnessMetalness; // r - roughness, g - metalness
+
+	DirectX::XMUINT4 pbrMode; // r : 1 - Normal Distribution, 2 - Geometry, 3 - Fresnel, Overwise - All
 };
 
 
@@ -91,6 +93,7 @@ Renderer::Renderer()
 	, m_windowHeight(0)
 	, m_pShaderCompiler(nullptr)
 	, m_pAnnotation(nullptr)
+	, m_projMatrix(DirectX::XMMatrixIdentity())
 	, m_startTime(0)
 	, m_currentTime(0)
 	, m_timeFromLastFrame(0)
@@ -726,6 +729,7 @@ HRESULT Renderer::CreateSceneResources()
 		PBRBuffer pbrBuffer = {};
 		pbrBuffer.albedo = { 1.0f, 0.71f, 0.29f, 1.0f };
 		pbrBuffer.roughnessMetalness = { 0.1f, 0.1f, 0.0f, 0.0f };
+		pbrBuffer.pbrMode = { 0u, 0u, 0u, 0u };
 
 		D3D11_SUBRESOURCE_DATA pbrBufferData = {};
 		pbrBufferData.pSysMem = &pbrBuffer;
@@ -948,14 +952,16 @@ void Renderer::RenderImGui()
 {
 	m_pAnnotation->BeginEvent(L"imGui");
 	static float bright = 10.0f;
-	static bool isNormal = false, isGeometry = false, isFrenel = false, isAll = true;
+	static bool isNormal = false, isGeometry = false, isFresnel = false, isAll = true;
 	static float roughness = 0.1f, metalness = 0.1f, rgb[3] = { 1.0f, 0.71f, 0.29f };
+	static UINT pbrMode = 0u;
 
 	static auto updatePBRBuffer = [this]()->void
 	{
 		PBRBuffer pbrBuffer = {};
 		pbrBuffer.roughnessMetalness = { roughness, metalness , 0.0f, 0.0f };
 		pbrBuffer.albedo = { rgb[0], rgb[1], rgb[2], 1.0f };
+		pbrBuffer.pbrMode = { pbrMode, 0u, 0u, 0u };
 		m_pContext->UpdateSubresource(m_pPBRBuffer, 0, nullptr, &pbrBuffer, 0, 0);
 	};
 
@@ -969,49 +975,60 @@ void Renderer::RenderImGui()
 
 	ImGui::BeginChild("Display modes", ImVec2(0, 125), true);
 	ImGui::Text("Display modes:");
+
 	if (ImGui::Checkbox("Normal distribution function", &isNormal))
 	{
 		isNormal = true;
 		isGeometry = false; 
-		isFrenel = false; 
+		isFresnel = false; 
 		isAll = false;
+
+		pbrMode = 1;
 	}
 	if (ImGui::Checkbox("Geometry function", &isGeometry))
 	{
 		isNormal = false;
 		isGeometry = true;
-		isFrenel = false;
+		isFresnel = false;
 		isAll = false;
+
+		pbrMode = 2;
 	}
-	if (ImGui::Checkbox("Fresnel function", &isFrenel))
+	if (ImGui::Checkbox("Fresnel function", &isFresnel))
 	{
 		isNormal = false;
 		isGeometry = false;
-		isFrenel = true;
+		isFresnel = true;
 		isAll = false;
+
+		pbrMode = 3;
 	}
 	if (ImGui::Checkbox("All", &isAll))
 	{
 		isNormal = false;
 		isGeometry = false;
-		isFrenel = false;
+		isFresnel = false;
 		isAll = true;
+
+		pbrMode = 0;
 	}
 	ImGui::EndChild();
 
 	ImGui::BeginChild("PBR setting", ImVec2(0, 100), true);
 	ImGui::Text("PBR setting:");
-	if(ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f) 
-	   || ImGui::SliderFloat("Metalness", &metalness, 0.0f, 1.0f) 
-	   || ImGui::DragFloat3("Albedo", rgb, 0.02f, 0.0f, 1.0f))
-	{ 
-		updatePBRBuffer();
-	}
+
+	ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f);
+	ImGui::SliderFloat("Metalness", &metalness, 0.0f, 1.0f);
+	ImGui::DragFloat3("Albedo", rgb, 0.02f, 0.0f, 1.0f);
+	
 	ImGui::EndChild();
 
 	ImGui::End();
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+	updatePBRBuffer();
+
 	m_pAnnotation->EndEvent();
 }
 

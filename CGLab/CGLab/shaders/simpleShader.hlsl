@@ -27,6 +27,8 @@ cbuffer PBRParams : register(b2)
 {
     float3 albedo;
     float4 roughnessMetalness; // r - roughness, g - metalness
+    
+    uint4 pbrMode; // r - mode : 1 - Normal Distribution, 2 - Geometry, 3 - Fresnel, Overwise - All
 };
 
 
@@ -88,7 +90,7 @@ float GeometryFunction(float3 normal, float3 dirToView, float3 dirToLight, float
 }
 
 
-float FresnelFunction(float3 dirToView, float3 halfVector, float3 metalF0, float metalness)
+float3 FresnelFunction(float3 dirToView, float3 halfVector, float3 metalF0, float metalness)
 {
     metalness = saturate(metalness);
     
@@ -108,12 +110,26 @@ float3 BRDF(float3 position, float3 lightPosition, float3 normal)
     float metalness = roughnessMetalness.g;
 
     float D = NormalDistributionFunction(normal, halfVector, roughness);
-    float F = FresnelFunction(dirToView, halfVector, albedo, metalness);
+    float3 F = FresnelFunction(dirToView, halfVector, albedo, metalness);
     float G = GeometryFunction(normal, dirToView, dirToLight, roughness);
     
-    float Lambert = (1 - F) * albedo / PI;
-    float CookTorrance = (D * G * F) / (4 * dot(dirToLight, normal) * dot(dirToView, normal));
-
+    float3 Lambert = (1 - F) * albedo / PI;
+    
+    if (pbrMode.r == 1u)
+    {
+        return D;
+    }
+    else if (pbrMode.r == 2u)
+    {
+        return G;
+    }
+    else if (pbrMode.r == 3u)
+    {
+        return F;
+    }
+    
+    float3 CookTorrance = (D * F * G) / (4 * dot(dirToLight, normal) * dot(dirToView, normal));
+    
     return Lambert * (1 - metalness) + CookTorrance;
 }
 
@@ -130,16 +146,10 @@ float4 PS(VSOut input) : SV_TARGET
     
         float attenuation = 1 / (1 + lengthToLight + lengthToLight2);
     
-        //float3 lightInpact = attenuation * saturate(dot(dirToLight / lengthToLight, input.worldNormal)) * lights[i].color.xyz;
-        //lightInpact *= lights[i].brightnessScaleFactor.r;
-    
-        //resultColor += lightInpact;
-        
         float3 lightInpact = attenuation * lights[i].color.xyz * lights[i].brightnessScaleFactor.r;
         lightInpact *= saturate(dot(dirToLight / lengthToLight, input.worldNormal));
         
         resultColor += BRDF(input.worldPosition.xyz, lights[i].position, input.worldNormal) * lightInpact;
-        //resultColor += lightInpact;
     }
     
     return float4(resultColor, 1.0f);
