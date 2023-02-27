@@ -85,6 +85,7 @@ Renderer::Renderer()
 	, m_pMinMagLinearSampler(nullptr)
 	, m_pEnvironmentCubeMap(nullptr)
 	, m_pEnvironmentCubeMapSRV(nullptr)
+	, m_pEnvironmentSphere(nullptr)
 	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
 	, m_windowHeight(0)
@@ -203,6 +204,7 @@ void Renderer::Release()
 	SafeRelease(m_pAnnotation);
 	SafeRelease(m_pConstantBuffer);
 
+	delete m_pEnvironmentSphere;
 	delete m_pShaderCompiler;
 	delete m_pToneMapping;
 	delete m_pCamera;
@@ -211,6 +213,10 @@ void Renderer::Release()
 	{
 		delete mesh;
 	}
+
+	ImGui_ImplDX11_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
 
 	if (m_isDebug) 
 	{
@@ -703,12 +709,7 @@ HRESULT Renderer::CreateSceneResources()
 	if (SUCCEEDED(hr))
 	{
 		m_meshes.push_back(mesh);
-		hr = CreateSphereResourses(30, 30, mesh);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, m_pEnvironmentSphere);
 	}
 
 	if (SUCCEEDED(hr))
@@ -939,17 +940,18 @@ void Renderer::Update()
 	m_currentTime = time;
 	
 	m_meshes[0]->modelMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
-	m_meshes[3]->modelMatrix = DirectX::XMMatrixTranslation(m_pCamera->GetPosition().x, m_pCamera->GetPosition().y, m_pCamera->GetPosition().z);
+	m_pEnvironmentSphere->modelMatrix = DirectX::XMMatrixTranslation(m_pCamera->GetPosition().x, m_pCamera->GetPosition().y, m_pCamera->GetPosition().z);
 }
 
 
 void Renderer::RenderImGui()
 {
+	m_pAnnotation->BeginEvent(L"imGui");
 	static float bright = 10.0f;
 	static bool isNormal = false, isGeometry = false, isFrenel = false, isAll = true;
 	static float roughness = 0.1f, metalness = 0.1f, rgb[3] = { 1.0f, 0.71f, 0.29f };
 
-	static auto updatePBRBuffer = [this](float roughness, float metalness, float rgb[])->void
+	static auto updatePBRBuffer = [this]()->void
 	{
 		PBRBuffer pbrBuffer = {};
 		pbrBuffer.roughnessMetalness = { roughness, metalness , 0.0f, 0.0f };
@@ -999,23 +1001,18 @@ void Renderer::RenderImGui()
 
 	ImGui::BeginChild("PBR setting", ImVec2(0, 100), true);
 	ImGui::Text("PBR setting:");
-	if(ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f))
+	if(ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f) 
+	   || ImGui::SliderFloat("Metalness", &metalness, 0.0f, 1.0f) 
+	   || ImGui::DragFloat3("Albedo", rgb, 0.02f, 0.0f, 1.0f))
 	{ 
-		updatePBRBuffer(roughness, metalness, rgb);
-	}
-	if(ImGui::SliderFloat("Metalness", &metalness, 0.0f, 1.0f))
-	{
-		updatePBRBuffer(roughness, metalness, rgb);
-	}
-	if (ImGui::DragFloat3("Albedo", rgb, 0.02f, 0.0f, 1.0f))
-	{
-		updatePBRBuffer(roughness, metalness, rgb);
+		updatePBRBuffer();
 	}
 	ImGui::EndChild();
 
 	ImGui::End();
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+	m_pAnnotation->EndEvent();
 }
 
 void Renderer::Render()
@@ -1023,6 +1020,10 @@ void Renderer::Render()
 	Update();
 
 	m_pAnnotation->BeginEvent(L"Draw Scene");
+
+	FLOAT width = s_near / tanf(s_fov / 2.0f);
+	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
+	m_projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
 
 	m_pContext->ClearState();
 
@@ -1051,6 +1052,11 @@ void Renderer::Render()
 	m_pContext->RSSetViewports(1, &viewport);
 	m_pContext->RSSetScissorRects(1, &rect);
 
+	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_pContext->IASetInputLayout(m_pInputLayout);
+	m_pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
+
+	RenderEnvironment();
 	RenderScene();
 
 	m_pAnnotation->EndEvent();
@@ -1064,51 +1070,33 @@ void Renderer::Render()
 
 void Renderer::RenderScene()
 {
-	FLOAT width = s_near / tanf(s_fov / 2.0f);
-	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
-
-	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
-
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	m_pContext->IASetInputLayout(m_pInputLayout);
-
 	m_pContext->RSSetState(m_pRasterizerState);
-	m_pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
 
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
-	for (int i = 0; i < 4; ++i)
+	for (auto& mesh : m_meshes)
 	{
-		if (i == 3) {
-			m_pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
-			m_pContext->RSSetState(m_pRasterizerStateFront);
-			m_pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
-			m_pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
-			m_pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);
-		}
-
-		ID3D11Buffer* vertexBuffers[] = { m_meshes[i]->pVertexBuffer };
+		ID3D11Buffer* vertexBuffers[] = { mesh->pVertexBuffer };
 
 		m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-		m_pContext->IASetIndexBuffer(m_meshes[i]->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+		m_pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
 		ConstantBuffer constantBuffer = {};
 
-		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(m_meshes[i]->modelMatrix));
-		DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * projMatrix));
+		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
+		DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
 		constantBuffer.cameraPosition = m_pCamera->GetPosition();
 		m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
 		m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 		m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-		m_pContext->DrawIndexed(m_meshes[i]->indexCount, 0, 0);
+		m_pContext->DrawIndexed(mesh->indexCount, 0, 0);
 	}
 }
 
@@ -1120,3 +1108,39 @@ void Renderer::PostProcessing()
 
 	m_pAnnotation->EndEvent();
 }
+
+void Renderer::RenderEnvironment()
+{
+	m_pAnnotation->BeginEvent(L"Environment");
+
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+
+	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer };
+
+	m_pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
+	m_pContext->RSSetState(m_pRasterizerStateFront);
+	m_pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+
+	m_pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
+	m_pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);
+
+	ID3D11Buffer* vertexBuffers[] = { m_pEnvironmentSphere->pVertexBuffer };
+
+	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+	m_pContext->IASetIndexBuffer(m_pEnvironmentSphere->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+	ConstantBuffer constantBuffer = {};
+
+	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(m_pEnvironmentSphere->modelMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
+	constantBuffer.cameraPosition = m_pCamera->GetPosition();
+	m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+
+	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	m_pContext->DrawIndexed(m_pEnvironmentSphere->indexCount, 0, 0);
+
+	m_pAnnotation->EndEvent();
+}
+

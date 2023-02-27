@@ -108,6 +108,7 @@ private:
 
 	void Update();
 	void RenderScene();
+	void RenderEnvironment();
 	void PostProcessing();
 
 	void FillLightBuffer();
@@ -138,6 +139,7 @@ private:
 	ID3D11SamplerState* m_pMinMagLinearSampler;
 
 	std::vector<Mesh*> m_meshes;
+	Mesh* m_pEnvironmentSphere;
 
 	ID3D11Buffer* m_pConstantBuffer;
 
@@ -162,6 +164,8 @@ private:
 	ShaderCompiler* m_pShaderCompiler;
 
 	ID3DUserDefinedAnnotation* m_pAnnotation;
+
+	DirectX::XMMATRIX m_projMatrix;
 
 	size_t m_startTime;
 	size_t m_currentTime;
