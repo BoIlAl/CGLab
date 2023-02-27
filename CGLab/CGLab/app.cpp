@@ -61,7 +61,7 @@ void App::MouseWheel(int delta)
 	m_pRenderer->getCamera()->Zoom(m_deltaZoom * (float)delta);
 }
 
-void App::MouseLButtonPressHandle(int x, int y)
+void App::MouseRButtonPressHandle(int x, int y)
 {
 	m_isPressed = true;
 	m_xMouse = x;
@@ -77,12 +77,12 @@ void App::MouseMovementHandle(int x, int y)
 	m_yMouse = y;
 }
 
-void App::MouseLButtonUpHandle(int x, int y)
+void App::MouseRButtonUpHandle(int x, int y)
 {
 	m_isPressed = false;
 }
 
-void App::NextLightBrightness()
+void App::AddButtonHandle()
 {
 	static constexpr FLOAT brightness[] = { 1.0f, 10.0f, 100.0f };
 	static UINT curIdx = 0;

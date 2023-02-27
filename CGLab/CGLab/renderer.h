@@ -51,6 +51,9 @@ private:
 	Renderer();
 
 	bool Init(HWND hWnd);
+	bool InitImGui(HWND hWnd);
+
+	void RenderImGui();
 
 	HRESULT CreateDevice(IDXGIFactory* pFactory);
 	HRESULT CreateSwapChain(IDXGIFactory* pFactory, HWND hWnd);

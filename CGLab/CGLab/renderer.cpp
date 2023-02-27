@@ -15,6 +15,9 @@
 #include "camera.h"
 #include "app.h"
 
+#include "imGui/imgui_impl_dx11.h"
+#include "imGui/imgui_impl_win32.h"
+
 
 struct Vertex
 {
@@ -131,13 +134,18 @@ bool Renderer::Init(HWND hWnd)
 
 	bool res = SUCCEEDED(hr);
 
-	if (SUCCEEDED(hr))
+	if (res)
 	{
 		m_pCamera = new Camera();
 		if (!m_pCamera)
 		{
 			res = false;
 		}
+	}
+
+	if (res)
+	{
+		res = InitImGui(hWnd);
 	}
 	
 	if (!res)
@@ -147,7 +155,20 @@ bool Renderer::Init(HWND hWnd)
 
 	SafeRelease(pFactory);
 
-	return SUCCEEDED(hr);
+	return res;
+}
+
+bool Renderer::InitImGui(HWND hWnd)
+{
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	bool res = ImGui_ImplWin32_Init(hWnd);
+	if (res)
+	{
+		res = ImGui_ImplDX11_Init(m_pDevice, m_pContext);
+	}
+	ImGui::StyleColorsDark();
+	return res;
 }
 
 
@@ -869,6 +890,64 @@ void Renderer::Update()
 }
 
 
+void Renderer::RenderImGui()
+{
+	static float bright = 1.0f;
+	static bool isNormal = false, isGeometry = false, isFrenel = false, isAll = true;
+	static float roughness = 0.0f, metalness = 0.0f, rgb[3] = { 0.0f, 0.0f, 0.0f };
+
+	ImGui_ImplDX11_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+	ImGui::Begin("Menu");
+
+	ImGui::SliderFloat("Brightness", &bright, 0.0f, 100.0f);
+	ChangeLightBrightness(0, bright);
+
+	ImGui::BeginChild("Display modes", ImVec2(0, 125), true);
+	ImGui::Text("Display modes:");
+	if (ImGui::Checkbox("Normal distribution function", &isNormal))
+	{
+		isNormal = true;
+		isGeometry = false; 
+		isFrenel = false; 
+		isAll = false;
+	}
+	if (ImGui::Checkbox("Geometry function", &isGeometry))
+	{
+		isNormal = false;
+		isGeometry = true;
+		isFrenel = false;
+		isAll = false;
+	}
+	if (ImGui::Checkbox("Fresnel function", &isFrenel))
+	{
+		isNormal = false;
+		isGeometry = false;
+		isFrenel = true;
+		isAll = false;
+	}
+	if (ImGui::Checkbox("All", &isAll))
+	{
+		isNormal = false;
+		isGeometry = false;
+		isFrenel = false;
+		isAll = true;
+	}
+	ImGui::EndChild();
+
+	ImGui::BeginChild("PBR setting", ImVec2(0, 100), true);
+	ImGui::Text("PBR setting:");
+	ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f);
+	ImGui::SliderFloat("Metalness", &metalness, 0.0f, 1.0f);
+	ImGui::DragFloat3("Albedo", rgb,  0.02f, 0.0f, 1.0f);
+	ImGui::EndChild();
+
+	ImGui::End();
+	ImGui::Render();
+	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+}
+
 void Renderer::Render()
 {
 	Update();
@@ -906,6 +985,8 @@ void Renderer::Render()
 	m_pAnnotation->EndEvent();
 
 	PostProcessing();
+
+	RenderImGui();
 
 	m_pSwapChain->Present(0, 0);
 }
