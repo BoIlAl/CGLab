@@ -31,6 +31,7 @@ struct ConstantBuffer
 {
 	DirectX::XMFLOAT4X4 modelMatrix;
 	DirectX::XMFLOAT4X4 vpMatrix;
+	DirectX::XMFLOAT4 cameraPosition;
 };
 
 struct LightBuffer
@@ -39,6 +40,11 @@ struct LightBuffer
 	PointLight lights[MaxLightNum];
 };
 
+struct PBRBuffer
+{
+	DirectX::XMFLOAT4 albedo;
+	DirectX::XMFLOAT4 roughnessMetalness; // r - roughness, g - metalness
+};
 
 
 Renderer* Renderer::CreateRenderer(HWND hWnd)
@@ -75,13 +81,19 @@ Renderer::Renderer()
 	, m_pHDRTextureRTV(nullptr)
 	, m_pHDRTextureSRV(nullptr)
 	, m_pRasterizerState(nullptr)
+	, m_pRasterizerStateFront(nullptr)
 	, m_pDepthStencilState(nullptr)
 	, m_pLightBuffer(nullptr)
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
+	, m_pEnvironmentVShader(nullptr)
+	, m_pEnvironmentPShader(nullptr)
 	, m_pInputLayout(nullptr)
+	, m_pConstantBuffer(nullptr)
+	, m_pMinMagLinearSampler(nullptr)
 	, m_pEnvironmentCubeMap(nullptr)
 	, m_pEnvironmentCubeMapSRV(nullptr)
+	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
 	, m_windowHeight(0)
 	, m_pShaderCompiler(nullptr)
@@ -132,6 +144,7 @@ bool Renderer::Init(HWND hWnd)
 		hr = CreateSceneResources();
 	}
 
+
 	bool res = SUCCEEDED(hr);
 
 	if (res)
@@ -174,14 +187,19 @@ bool Renderer::InitImGui(HWND hWnd)
 
 void Renderer::Release()
 {
+	SafeRelease(m_pPBRBuffer);
 	SafeRelease(m_pEnvironmentCubeMapSRV);
 	SafeRelease(m_pEnvironmentCubeMap);
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
+	SafeRelease(m_pMinMagLinearSampler);
+	SafeRelease(m_pEnvironmentPShader);
+	SafeRelease(m_pEnvironmentVShader);
 	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerState);
+	SafeRelease(m_pRasterizerStateFront);
 	SafeRelease(m_pHDRTextureSRV);
 	SafeRelease(m_pHDRTextureRTV);
 	SafeRelease(m_pHDRRenderTarget);
@@ -191,17 +209,15 @@ void Renderer::Release()
 	SafeRelease(m_pSwapChain);
 	SafeRelease(m_pContext);
 	SafeRelease(m_pAnnotation);
+	SafeRelease(m_pConstantBuffer);
 
 	delete m_pShaderCompiler;
 	delete m_pToneMapping;
+	delete m_pCamera;
 
-	if (m_pCamera != nullptr)
+	for (auto& mesh : m_meshes)
 	{
-		delete m_pCamera;
-	}
-
-	for (auto mesh : m_meshes) {
-		ReleaseMesh(mesh);
+		delete mesh;
 	}
 
 	if (m_isDebug) 
@@ -392,6 +408,37 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
+		D3D11_RASTERIZER_DESC rasterizerDesc = {};
+		rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+		rasterizerDesc.CullMode = D3D11_CULL_FRONT;
+		rasterizerDesc.FrontCounterClockwise = false;
+		rasterizerDesc.DepthBias = 0;
+		rasterizerDesc.SlopeScaledDepthBias = 0.0f;
+		rasterizerDesc.DepthBiasClamp = 0.0f;
+		rasterizerDesc.DepthClipEnable = false;
+		rasterizerDesc.ScissorEnable = false;
+		rasterizerDesc.MultisampleEnable = false;
+		rasterizerDesc.AntialiasedLineEnable = false;
+
+		hr = m_pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerStateFront);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_SAMPLER_DESC samplerDesc = {};
+		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.MipLODBias = 0;
+		samplerDesc.MinLOD = 0;
+		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+		hr = m_pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
+	}
+
+	if (SUCCEEDED(hr))
+	{
 		D3D11_DEPTH_STENCIL_DESC depthStencilStateDesc = {};
 		depthStencilStateDesc.DepthEnable = true;
 		depthStencilStateDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -423,6 +470,24 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
+		if (m_pShaderCompiler == nullptr)
+		{
+			m_pShaderCompiler = new ShaderCompiler(m_pDevice, m_isDebug);
+		}
+
+		if (!m_pShaderCompiler->CreateVertexAndPixelShaders(
+			"shaders/environment.hlsl",
+			&m_pEnvironmentVShader,
+			&pVSBlob,
+			&m_pEnvironmentPShader
+		))
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
 		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
 			CreateInputElementDesc("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0),
 			CreateInputElementDesc("COLOR", DXGI_FORMAT_R32G32B32A32_FLOAT, sizeof(DirectX::XMFLOAT3)),
@@ -441,15 +506,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	return hr;
 }
 
-void Renderer::ReleaseMesh(Mesh*& mesh)
-{
-	SafeRelease(mesh->pConstantBuffer);
-	SafeRelease(mesh->pIndexBuffer);
-	SafeRelease(mesh->pVertexBuffer);
-	delete (mesh);
-}
-
-HRESULT Renderer::CreateCubeResourses(Mesh** cubeMesh)
+HRESULT Renderer::CreateCubeResourses(Mesh*& cubeMesh)
 {
 	static constexpr Vertex vertices[] = {
 		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f },	{ 0.0f, -1.0f, 0.0f } },
@@ -508,14 +565,8 @@ HRESULT Renderer::CreateCubeResourses(Mesh** cubeMesh)
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
-
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &mesh->pConstantBuffer);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		*cubeMesh = mesh;
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
+		cubeMesh = mesh;
 	}
 	else
 	{
@@ -525,7 +576,7 @@ HRESULT Renderer::CreateCubeResourses(Mesh** cubeMesh)
 	return hr;
 }
 
-HRESULT Renderer::CreatePlaneResourses(Mesh** planeMesh)
+HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 {
 	static constexpr Vertex vertices[] = {
 	{ { -0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
@@ -554,14 +605,8 @@ HRESULT Renderer::CreatePlaneResourses(Mesh** planeMesh)
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
-
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &mesh->pConstantBuffer);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		*planeMesh = mesh;
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(15.0f, 1.0f, 15.0f);
+		planeMesh = mesh;
 	}
 	else
 	{
@@ -570,7 +615,8 @@ HRESULT Renderer::CreatePlaneResourses(Mesh** planeMesh)
 	return hr;
 }
 
-HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh** sphereMesh)
+
+HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh)
 {
 	std::vector<Vertex> vertices;
 	std::vector<UINT16> indices;
@@ -607,11 +653,11 @@ HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBa
 			UINT16 second = first + longitudeBands + 1;
 
 			indices.push_back(first);
-			indices.push_back(second);
 			indices.push_back(first + 1);
-
 			indices.push_back(second);
+
 			indices.push_back(second + 1);
+			indices.push_back(second);
 			indices.push_back(first + 1);
 		}
 	}
@@ -627,19 +673,14 @@ HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBa
 	{
 		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(mesh->indexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(indices.data());
+
 		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
-
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &mesh->pConstantBuffer);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		*sphereMesh = mesh;
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, 1.0f, 0.0f);
+		sphereMesh = mesh;
 	}
 	else
 	{
@@ -651,25 +692,71 @@ HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBa
 
 HRESULT Renderer::CreateSceneResources()
 {
-	HRESULT hr = CreateCubeResourses(&m_meshes[0]);
+	Mesh* mesh = nullptr;
+
+	HRESULT hr = CreateCubeResourses(mesh);
 
 	if (SUCCEEDED(hr))
 	{
-		hr = CreatePlaneResourses(&m_meshes[1]);
+		m_meshes.push_back(mesh);
+		hr = CreatePlaneResourses(mesh);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		hr = CreateSphereResourses(30, 30, &m_meshes[2]);
+		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_meshes.push_back(mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pConstantBuffer);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC pbrBufferDesc = CreateDefaultBufferDesc(sizeof(PBRBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		PBRBuffer pbrBuffer = {};
+		pbrBuffer.albedo = { 1.0f, 0.71f, 0.29f, 1.0f };
+		pbrBuffer.roughnessMetalness = { 0.1f, 0.1f, 0.0f, 0.0f };
+
+		D3D11_SUBRESOURCE_DATA pbrBufferData = {};
+		pbrBufferData.pSysMem = &pbrBuffer;
+		pbrBufferData.SysMemPitch = 0;
+		pbrBufferData.SysMemSlicePitch = 0;
+
+		hr = m_pDevice->CreateBuffer(&pbrBufferDesc, &pbrBufferData, &m_pPBRBuffer);
 	}
 
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		m_lights.push_back(PointLight({ -4.0f, -0.25f, 0.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
-		m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
-		m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ 0.0f, 1.0f, -7.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+
+		//m_lights.push_back(PointLight({ -4.0f, -0.25f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		//m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		//m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
 
 		LightBuffer lightBuffer = {};
 		lightBuffer.lightsCount.x = (UINT)m_lights.size();
@@ -716,9 +803,9 @@ HRESULT Renderer::LoadTextureCube(
 	const std::string& pathToCubeSrc,
 	ID3D11Texture2D** ppTextureCube,
 	ID3D11ShaderResourceView** ppTextureCubeSRV
-)
+) const
 {
-	static std::string edges[6] = { "posx", "negx", "posy", "negy", "posz", "negz" };
+	std::string edges[6] = { "posx", "negx", "posy", "negy", "posz", "negz" };
 	HRESULT hr = S_OK;
 
 	ID3D11Texture2D* pSrcTexture = nullptr;
@@ -865,28 +952,8 @@ void Renderer::Update()
 	m_timeFromLastFrame = time - m_currentTime;
 	m_currentTime = time;
 	
-	FLOAT width = s_near / tanf(s_fov / 2.0f);
-	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
-
-	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
-	DirectX::XMMATRIX modelPlaneMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
-	DirectX::XMMATRIX modelSphereMatrix = DirectX::XMMatrixTranslation(7.5f, 0.0f, 0.0f);
-	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
-	DirectX::XMMATRIX viewMatrix = m_pCamera->GetViewMatrix();
-
-	ConstantBuffer constantBuffer = {};
-
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-	m_pContext->UpdateSubresource(m_meshes[0]->pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
-	
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-	m_pContext->UpdateSubresource(m_meshes[1]->pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
-
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelSphereMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-	m_pContext->UpdateSubresource(m_meshes[2]->pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+	m_meshes[0]->modelMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
+	m_meshes[3]->modelMatrix = DirectX::XMMatrixTranslation(m_pCamera->GetPosition().x, m_pCamera->GetPosition().y, m_pCamera->GetPosition().z);
 }
 
 
@@ -956,7 +1023,8 @@ void Renderer::Render()
 
 	m_pContext->ClearState();
 
-	m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
+	//m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
+	m_pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
 
 	static constexpr float fillColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
 	m_pContext->ClearRenderTargetView(m_pBackBufferRTV, fillColor);
@@ -984,7 +1052,7 @@ void Renderer::Render()
 
 	m_pAnnotation->EndEvent();
 
-	PostProcessing();
+	//PostProcessing();
 
 	RenderImGui();
 
@@ -993,6 +1061,11 @@ void Renderer::Render()
 
 void Renderer::RenderScene()
 {
+	FLOAT width = s_near / tanf(s_fov / 2.0f);
+	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
+
+	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
+
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
@@ -1006,17 +1079,33 @@ void Renderer::RenderScene()
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	ID3D11Buffer* constantBuffers[] = { nullptr, m_pLightBuffer };
+	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
-	for (auto mesh : m_meshes) {
-		ID3D11Buffer* vertexBuffers[] = { mesh->pVertexBuffer };
+	for (int i = 0; i < 4; ++i)
+	{
+		if (i == 3) {
+			m_pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
+			m_pContext->RSSetState(m_pRasterizerStateFront);
+			m_pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+			m_pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
+			m_pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);
+		}
+
+		ID3D11Buffer* vertexBuffers[] = { m_meshes[i]->pVertexBuffer };
 
 		m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-		m_pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-		constantBuffers[0] = mesh->pConstantBuffer;
+		m_pContext->IASetIndexBuffer(m_meshes[i]->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+		ConstantBuffer constantBuffer = {};
+
+		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(m_meshes[i]->modelMatrix));
+		DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * projMatrix));
+		constantBuffer.cameraPosition = m_pCamera->GetPosition();
+		m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+
 		m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 		m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-		m_pContext->DrawIndexed(mesh->indexCount, 0, 0);
+		m_pContext->DrawIndexed(m_meshes[i]->indexCount, 0, 0);
 	}
 }
 

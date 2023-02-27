@@ -26,7 +26,7 @@ struct VSOut
 VSOut VS(VSIn input)
 {
     VSOut output;
-    output.position = mul(mul(float4(input.position, 1.0f), modelMatrix), vpMatrix);
+    output.position = mul(mul(float4(input.position, 1.0f), modelMatrix), vpMatrix).xyww;
     output.texCoord = input.position;
 
     return output;

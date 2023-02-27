@@ -29,6 +29,14 @@ class Camera;
 
 static constexpr UINT MaxLightNum = 3;
 
+struct Vertex
+{
+	DirectX::XMFLOAT3 position;
+	DirectX::XMFLOAT4 color;
+	DirectX::XMFLOAT3 normal;
+};
+
+
 // TODO: divide into renderer and context
 class Renderer
 {
@@ -46,6 +54,23 @@ public:
 	void ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness);
 
 	Camera* getCamera();
+	inline ID3D11Device* GetDevice() const { return m_pDevice; }
+	inline ID3D11DeviceContext* GetContext() const { return m_pContext; }
+
+	HRESULT CreateSphereBuffers(
+		UINT16 latitudeBands,
+		UINT16 longitudeBands,
+		ID3D11Buffer** ppVertexBuffer,
+		ID3D11Buffer** ppIndexBuffer,
+		UINT* pIndexCount
+	) const;
+
+
+	HRESULT LoadTextureCube(
+		const std::string& pathToCubeSrc,
+		ID3D11Texture2D** ppTextureCube,
+		ID3D11ShaderResourceView** ppTextureCubeSRV
+	) const;
 
 private:
 	Renderer();
@@ -65,24 +90,21 @@ private:
 		ID3D11Buffer* pVertexBuffer = nullptr;
 		ID3D11Buffer* pIndexBuffer = nullptr;
 		UINT indexCount = 0;
-		ID3D11Buffer* pConstantBuffer = nullptr;
+		DirectX::XMMATRIX modelMatrix;
+
+		~Mesh() {
+			SafeRelease(pIndexBuffer);
+			SafeRelease(pVertexBuffer);
+		}
 	};
 
-	void ReleaseMesh(Mesh*& mesh);
-
-	HRESULT CreateCubeResourses(Mesh** cubeMesh);
-	HRESULT CreatePlaneResourses(Mesh** planeMesh);
-	HRESULT CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh** sphereMesh);
+	HRESULT CreateCubeResourses(Mesh*& cubeMesh);
+	HRESULT CreatePlaneResourses(Mesh*& planeMesh);
+	HRESULT CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh);
 
 	HRESULT CreateSceneResources();
 
 	HRESULT SetResourceName(ID3D11Resource* pResource, const std::string& name);
-
-	HRESULT LoadTextureCube(
-		const std::string& pathToCubeSrc,
-		ID3D11Texture2D** ppTextureCube,
-		ID3D11ShaderResourceView** ppTextureCubeSRV
-	);
 
 	void Update();
 	void RenderScene();
@@ -111,19 +133,28 @@ private:
 	ID3D11ShaderResourceView* m_pHDRTextureSRV;
 
 	ID3D11RasterizerState* m_pRasterizerState;
+	ID3D11RasterizerState* m_pRasterizerStateFront;
 	ID3D11DepthStencilState* m_pDepthStencilState;
+	ID3D11SamplerState* m_pMinMagLinearSampler;
 
-	Mesh* m_meshes[3] = { nullptr, nullptr, nullptr };
+	std::vector<Mesh*> m_meshes;
+
+	ID3D11Buffer* m_pConstantBuffer;
 
 	ID3D11Buffer* m_pLightBuffer;
 
 	ID3D11VertexShader* m_pVertexShader;
 	ID3D11PixelShader* m_pPixelShader;
 
+	ID3D11VertexShader* m_pEnvironmentVShader;
+	ID3D11PixelShader* m_pEnvironmentPShader;
+
 	ID3D11InputLayout* m_pInputLayout;
 
 	ID3D11Texture2D* m_pEnvironmentCubeMap;
 	ID3D11ShaderResourceView* m_pEnvironmentCubeMapSRV;
+
+	ID3D11Buffer* m_pPBRBuffer;
 
 	UINT m_windowWidth;
 	UINT m_windowHeight;

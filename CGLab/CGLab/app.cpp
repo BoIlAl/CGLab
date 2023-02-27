@@ -21,7 +21,12 @@ void App::DeleteAppl(App*& pAppl)
 
 bool App::Resize(UINT newWidth, UINT newHeight)
 {
-	return m_pRenderer->Resize(newWidth, newHeight);;
+	if (newWidth == 0 || newHeight == 0)
+	{
+		return true;
+	}
+
+	return m_pRenderer->Resize(newWidth, newHeight);
 }
 
 void App::Render()
@@ -89,7 +94,7 @@ void App::AddButtonHandle()
 
 	curIdx = (curIdx + 1u) % (UINT)_countof(brightness);
 
-	m_pRenderer->ChangeLightBrightness(2, brightness[curIdx]);
+	m_pRenderer->ChangeLightBrightness(0, brightness[curIdx]);
 }
 
 
