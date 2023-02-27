@@ -76,6 +76,9 @@ private:
 	Renderer();
 
 	bool Init(HWND hWnd);
+	bool InitImGui(HWND hWnd);
+
+	void RenderImGui();
 
 	HRESULT CreateDevice(IDXGIFactory* pFactory);
 	HRESULT CreateSwapChain(IDXGIFactory* pFactory, HWND hWnd);
@@ -105,6 +108,7 @@ private:
 
 	void Update();
 	void RenderScene();
+	void RenderEnvironment();
 	void PostProcessing();
 
 	void FillLightBuffer();
@@ -130,9 +134,12 @@ private:
 	ID3D11ShaderResourceView* m_pHDRTextureSRV;
 
 	ID3D11RasterizerState* m_pRasterizerState;
+	ID3D11RasterizerState* m_pRasterizerStateFront;
 	ID3D11DepthStencilState* m_pDepthStencilState;
+	ID3D11SamplerState* m_pMinMagLinearSampler;
 
 	std::vector<Mesh*> m_meshes;
+	Mesh* m_pEnvironmentSphere;
 
 	ID3D11Buffer* m_pConstantBuffer;
 
@@ -140,6 +147,9 @@ private:
 
 	ID3D11VertexShader* m_pVertexShader;
 	ID3D11PixelShader* m_pPixelShader;
+
+	ID3D11VertexShader* m_pEnvironmentVShader;
+	ID3D11PixelShader* m_pEnvironmentPShader;
 
 	ID3D11InputLayout* m_pInputLayout;
 
@@ -154,6 +164,8 @@ private:
 	ShaderCompiler* m_pShaderCompiler;
 
 	ID3DUserDefinedAnnotation* m_pAnnotation;
+
+	DirectX::XMMATRIX m_projMatrix;
 
 	size_t m_startTime;
 	size_t m_currentTime;

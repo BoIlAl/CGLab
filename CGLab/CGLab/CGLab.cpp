@@ -4,6 +4,7 @@
 #include "framework.h"
 #include "CGLab.h"
 #include "app.h"
+#include "imGui/imgui_impl_win32.h"
 
 
 #define __CRTDBG_MAP_ALLOC
@@ -152,8 +153,10 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 //  WM_DESTROY  - отправить сообщение о выходе и вернуться
 //
 //
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
+    ImGui_ImplWin32_WndProcHandler(hWnd, message, wParam, lParam);
     switch (message)
     {
     case WM_SIZE:
@@ -184,7 +187,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 g_pAppl->HorizontalArrowHandle(false);
                 break;
             case VK_ADD:
-                g_pAppl->NextLightBrightness();
+                g_pAppl->AddButtonHandle();
                 break;
             }
         }
@@ -199,20 +202,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             case 'x':
                 g_pAppl->XHandle();
                 break;
+            case 'w':
+                g_pAppl->VerticalArrowHandle(true);
+                break;
+            case 's':
+                g_pAppl->VerticalArrowHandle(false);
+                break;
+            case 'a':
+                g_pAppl->HorizontalArrowHandle(true);
+                break;
+            case 'd':
+                g_pAppl->HorizontalArrowHandle(false);
+                break;
             }
         }
         break;
     case WM_MOUSEWHEEL:
         g_pAppl->MouseWheel(GET_WHEEL_DELTA_WPARAM(wParam));
         break;
-    case WM_LBUTTONDOWN:
-        g_pAppl->MouseLButtonPressHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+    case WM_RBUTTONDOWN:
+        g_pAppl->MouseRButtonPressHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         break;
     case WM_MOUSEMOVE:
         g_pAppl->MouseMovementHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         break;
-    case WM_LBUTTONUP:
-        g_pAppl->MouseLButtonUpHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+    case WM_RBUTTONUP:
+        g_pAppl->MouseRButtonUpHandle(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         break;
     case WM_COMMAND:
         {

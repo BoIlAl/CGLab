@@ -32,7 +32,7 @@ void Camera::MovePerpendicular(float delta)
 
 void Camera::Rotate(float horisontalAngle, float verticalAngle)
 {
-	m_vertAngle += verticalAngle;
+	m_vertAngle -= verticalAngle;
 	m_horzAngle -= horisontalAngle;
 
 	Update();
