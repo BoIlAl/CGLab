@@ -130,7 +130,9 @@ private:
 	ID3D11ShaderResourceView* m_pHDRTextureSRV;
 
 	ID3D11RasterizerState* m_pRasterizerState;
+	ID3D11RasterizerState* m_pRasterizerStateFront;
 	ID3D11DepthStencilState* m_pDepthStencilState;
+	ID3D11SamplerState* m_pMinMagLinearSampler;
 
 	std::vector<Mesh*> m_meshes;
 
@@ -140,6 +142,9 @@ private:
 
 	ID3D11VertexShader* m_pVertexShader;
 	ID3D11PixelShader* m_pPixelShader;
+
+	ID3D11VertexShader* m_pEnvironmentVShader;
+	ID3D11PixelShader* m_pEnvironmentPShader;
 
 	ID3D11InputLayout* m_pInputLayout;
 

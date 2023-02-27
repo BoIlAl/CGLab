@@ -70,12 +70,16 @@ Renderer::Renderer()
 	, m_pHDRTextureRTV(nullptr)
 	, m_pHDRTextureSRV(nullptr)
 	, m_pRasterizerState(nullptr)
+	, m_pRasterizerStateFront(nullptr)
 	, m_pDepthStencilState(nullptr)
 	, m_pLightBuffer(nullptr)
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
+	, m_pEnvironmentVShader(nullptr)
+	, m_pEnvironmentPShader(nullptr)
 	, m_pInputLayout(nullptr)
 	, m_pConstantBuffer(nullptr)
+	, m_pMinMagLinearSampler(nullptr)
 	, m_pEnvironmentCubeMap(nullptr)
 	, m_pEnvironmentCubeMapSRV(nullptr)
 	, m_pPBRBuffer(nullptr)
@@ -160,9 +164,13 @@ void Renderer::Release()
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
+	SafeRelease(m_pMinMagLinearSampler);
+	SafeRelease(m_pEnvironmentPShader);
+	SafeRelease(m_pEnvironmentVShader);
 	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerState);
+	SafeRelease(m_pRasterizerStateFront);
 	SafeRelease(m_pHDRTextureSRV);
 	SafeRelease(m_pHDRTextureRTV);
 	SafeRelease(m_pHDRRenderTarget);
@@ -371,6 +379,37 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
+		D3D11_RASTERIZER_DESC rasterizerDesc = {};
+		rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+		rasterizerDesc.CullMode = D3D11_CULL_FRONT;
+		rasterizerDesc.FrontCounterClockwise = false;
+		rasterizerDesc.DepthBias = 0;
+		rasterizerDesc.SlopeScaledDepthBias = 0.0f;
+		rasterizerDesc.DepthBiasClamp = 0.0f;
+		rasterizerDesc.DepthClipEnable = false;
+		rasterizerDesc.ScissorEnable = false;
+		rasterizerDesc.MultisampleEnable = false;
+		rasterizerDesc.AntialiasedLineEnable = false;
+
+		hr = m_pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerStateFront);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_SAMPLER_DESC samplerDesc = {};
+		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.MipLODBias = 0;
+		samplerDesc.MinLOD = 0;
+		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+		hr = m_pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
+	}
+
+	if (SUCCEEDED(hr))
+	{
 		D3D11_DEPTH_STENCIL_DESC depthStencilStateDesc = {};
 		depthStencilStateDesc.DepthEnable = true;
 		depthStencilStateDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -394,6 +433,24 @@ HRESULT Renderer::CreatePipelineStateObjects()
 			&m_pVertexShader,
 			&pVSBlob,
 			&m_pPixelShader
+		))
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		if (m_pShaderCompiler == nullptr)
+		{
+			m_pShaderCompiler = new ShaderCompiler(m_pDevice, m_isDebug);
+		}
+
+		if (!m_pShaderCompiler->CreateVertexAndPixelShaders(
+			"shaders/environment.hlsl",
+			&m_pEnvironmentVShader,
+			&pVSBlob,
+			&m_pEnvironmentPShader
 		))
 		{
 			hr = E_FAIL;
@@ -519,7 +576,7 @@ HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 
 	if (SUCCEEDED(hr))
 	{
-		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(15.0f, 1.0f, 15.0f);
 		planeMesh = mesh;
 	}
 	else
@@ -614,6 +671,18 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		m_meshes.push_back(mesh);
 		hr = CreatePlaneResourses(mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, mesh);
 	}
 
 	if (SUCCEEDED(hr))
@@ -855,6 +924,7 @@ void Renderer::Update()
 	m_currentTime = time;
 	
 	m_meshes[0]->modelMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
+	m_meshes[3]->modelMatrix = DirectX::XMMatrixTranslation(m_pCamera->GetPosition().x, m_pCamera->GetPosition().y, m_pCamera->GetPosition().z);
 }
 
 
@@ -922,23 +992,31 @@ void Renderer::RenderScene()
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
-	for (auto mesh : m_meshes)
+	for (int i = 0; i < 4; ++i)
 	{
-		ID3D11Buffer* vertexBuffers[] = { mesh->pVertexBuffer };
+		if (i == 3) {
+			m_pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
+			m_pContext->RSSetState(m_pRasterizerStateFront);
+			m_pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+			m_pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
+			m_pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);
+		}
+
+		ID3D11Buffer* vertexBuffers[] = { m_meshes[i]->pVertexBuffer };
 
 		m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-		m_pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+		m_pContext->IASetIndexBuffer(m_meshes[i]->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
 		ConstantBuffer constantBuffer = {};
 
-		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
+		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(m_meshes[i]->modelMatrix));
 		DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * projMatrix));
 		constantBuffer.cameraPosition = m_pCamera->GetPosition();
 		m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
 		m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 		m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-		m_pContext->DrawIndexed(mesh->indexCount, 0, 0);
+		m_pContext->DrawIndexed(m_meshes[i]->indexCount, 0, 0);
 	}
 }
 
