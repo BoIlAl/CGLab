@@ -654,7 +654,7 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		m_lights.push_back(PointLight({ 0.0f, 1.0f, -7.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ 3.0f, 1.0f, -7.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f },	1.0f));
 
 		//m_lights.push_back(PointLight({ -4.0f, -0.25f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
 		//m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));

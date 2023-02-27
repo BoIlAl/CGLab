@@ -112,7 +112,7 @@ float3 BRDF(float3 position, float3 lightPosition, float3 normal)
     float G = GeometryFunction(normal, dirToView, dirToLight, roughness);
     
     float Lambert = (1 - F) * albedo / PI;
-    float CookTorrance = (D) / (4 * dot(dirToLight, normal) * dot(dirToView, normal));
+    float CookTorrance = (D * G * F) / (4 * dot(dirToLight, normal) * dot(dirToView, normal));
 
     return Lambert * (1 - metalness) + CookTorrance;
 }
