@@ -709,12 +709,6 @@ HRESULT Renderer::CreateSceneResources()
 	if (SUCCEEDED(hr))
 	{
 		m_meshes.push_back(mesh);
-		hr = CreateSphereResourses(30, 30, mesh);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		m_meshes.push_back(mesh);
 	}
 
 	if (SUCCEEDED(hr))
@@ -951,9 +945,17 @@ void Renderer::Update()
 
 void Renderer::RenderImGui()
 {
-	static float bright = 1.0f;
+	static float bright = 10.0f;
 	static bool isNormal = false, isGeometry = false, isFrenel = false, isAll = true;
-	static float roughness = 0.0f, metalness = 0.0f, rgb[3] = { 0.0f, 0.0f, 0.0f };
+	static float roughness = 0.1f, metalness = 0.1f, rgb[3] = { 1.0f, 0.71f, 0.29f };
+
+	static auto updatePBRBuffer = [this](float roughness, float metalness, float rgb[])->void
+	{
+		PBRBuffer pbrBuffer = {};
+		pbrBuffer.roughnessMetalness = { roughness, metalness , 0.0f, 0.0f };
+		pbrBuffer.albedo = { rgb[0], rgb[1], rgb[2], 1.0f };
+		m_pContext->UpdateSubresource(m_pPBRBuffer, 0, nullptr, &pbrBuffer, 0, 0);
+	};
 
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
@@ -997,9 +999,18 @@ void Renderer::RenderImGui()
 
 	ImGui::BeginChild("PBR setting", ImVec2(0, 100), true);
 	ImGui::Text("PBR setting:");
-	ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f);
-	ImGui::SliderFloat("Metalness", &metalness, 0.0f, 1.0f);
-	ImGui::DragFloat3("Albedo", rgb,  0.02f, 0.0f, 1.0f);
+	if(ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f))
+	{ 
+		updatePBRBuffer(roughness, metalness, rgb);
+	}
+	if(ImGui::SliderFloat("Metalness", &metalness, 0.0f, 1.0f))
+	{
+		updatePBRBuffer(roughness, metalness, rgb);
+	}
+	if (ImGui::DragFloat3("Albedo", rgb, 0.02f, 0.0f, 1.0f))
+	{
+		updatePBRBuffer(roughness, metalness, rgb);
+	}
 	ImGui::EndChild();
 
 	ImGui::End();
