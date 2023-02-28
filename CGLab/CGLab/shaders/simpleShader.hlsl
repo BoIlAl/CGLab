@@ -94,7 +94,7 @@ float3 FresnelFunction(float3 dirToView, float3 halfVector, float3 metalF0, floa
 {
     metalness = saturate(metalness);
     
-    float3 F0 = (0.4f, 0.4f, 0.4f) * (1 - metalness) + metalF0 * metalness;
+    float3 F0 = max((0.04f, 0.04f, 0.04f) * (1 - metalness) + metalF0 * metalness, float3(0.0f, 0.0f, 0.0f));
     
     return F0 + (1 - F0) * pow(1 - dot(dirToView, halfVector), 5.0f);
 }
@@ -113,21 +113,20 @@ float3 BRDF(float3 position, float3 lightPosition, float3 normal)
     float3 F = FresnelFunction(dirToView, halfVector, albedo, metalness);
     float G = GeometryFunction(normal, dirToView, dirToLight, roughness);
     
-    float3 Lambert = (1 - F) * albedo / PI;
-    
     if (pbrMode.r == 1u)
     {
-        return D;
+        return float3(D, D, D);
     }
     else if (pbrMode.r == 2u)
     {
-        return G;
+        return float3(G, G, G);
     }
     else if (pbrMode.r == 3u)
     {
         return F;
     }
     
+    float3 Lambert = (1 - F) * albedo / PI;
     float3 CookTorrance = (D * F * G) / (4 * dot(dirToLight, normal) * dot(dirToView, normal));
     
     return Lambert * (1 - metalness) + CookTorrance;
@@ -137,6 +136,7 @@ float3 BRDF(float3 position, float3 lightPosition, float3 normal)
 float4 PS(VSOut input) : SV_TARGET
 {
     float3 resultColor = float3(0.0f, 0.0f, 0.0f);
+    float3 normal = normalize(input.worldNormal);
     
     for (uint i = 0; i < lightsCount.r; ++i)
     {
@@ -147,9 +147,9 @@ float4 PS(VSOut input) : SV_TARGET
         float attenuation = 1 / (1 + lengthToLight + lengthToLight2);
     
         float3 lightInpact = attenuation * lights[i].color.xyz * lights[i].brightnessScaleFactor.r;
-        lightInpact *= saturate(dot(dirToLight / lengthToLight, input.worldNormal));
+        lightInpact *= saturate(dot(dirToLight / lengthToLight, normal));
         
-        resultColor += BRDF(input.worldPosition.xyz, lights[i].position, input.worldNormal) * lightInpact;
+        resultColor += BRDF(input.worldPosition.xyz, lights[i].position, normal) * lightInpact;
     }
     
     return float4(resultColor, 1.0f);
