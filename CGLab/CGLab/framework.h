@@ -18,4 +18,5 @@
 #include <tchar.h>
 #include <string>
 #include <vector>
+#include <d3d11.h>
 

@@ -1,5 +1,3 @@
-#include "renderer.h"
-
 #include <d3d11.h>
 #include <d3d11_1.h>
 #include <dxgi.h>
@@ -8,25 +6,24 @@
 #include <cmath>
 #include <chrono>
 
+#include "WICTextureLoader.h"
+
+#include "renderer.h"
+
 #include "shaderCompiler.h"
-#include "common.h"
 #include "toneMapping.h"
 #include "camera.h"
 #include "app.h"
 
-
-struct Vertex
-{
-	DirectX::XMFLOAT3 position;
-	DirectX::XMFLOAT4 color;
-	DirectX::XMFLOAT3 normal;
-};
+#include "imGui/imgui_impl_dx11.h"
+#include "imGui/imgui_impl_win32.h"
 
 
 struct ConstantBuffer
 {
 	DirectX::XMFLOAT4X4 modelMatrix;
 	DirectX::XMFLOAT4X4 vpMatrix;
+	DirectX::XMFLOAT4 cameraPosition;
 };
 
 struct LightBuffer
@@ -35,6 +32,13 @@ struct LightBuffer
 	PointLight lights[MaxLightNum];
 };
 
+struct PBRBuffer
+{
+	DirectX::XMFLOAT4 albedo;
+	DirectX::XMFLOAT4 roughnessMetalness; // r - roughness, g - metalness
+
+	DirectX::XMUINT4 pbrMode; // r : 1 - Normal Distribution, 2 - Geometry, 3 - Fresnel, Overwise - All
+};
 
 
 Renderer* Renderer::CreateRenderer(HWND hWnd)
@@ -71,23 +75,25 @@ Renderer::Renderer()
 	, m_pHDRTextureRTV(nullptr)
 	, m_pHDRTextureSRV(nullptr)
 	, m_pRasterizerState(nullptr)
+	, m_pRasterizerStateFront(nullptr)
 	, m_pDepthStencilState(nullptr)
 	, m_pLightBuffer(nullptr)
-	, m_pCubeVertexBuffer(nullptr)
-	, m_pCubeIndexBuffer(nullptr)
-	, m_cubeIndexCount(0)
-	, m_pPlaneVertexBuffer(nullptr)
-	, m_pPlaneIndexBuffer(nullptr)
-	, m_planeIndexCount(0)
-	, m_pCubeConstantBuffer(nullptr)
-	, m_pPlaneConstantBuffer(nullptr)
 	, m_pVertexShader(nullptr)
 	, m_pPixelShader(nullptr)
+	, m_pEnvironmentVShader(nullptr)
+	, m_pEnvironmentPShader(nullptr)
 	, m_pInputLayout(nullptr)
+	, m_pConstantBuffer(nullptr)
+	, m_pMinMagLinearSampler(nullptr)
+	, m_pEnvironmentCubeMap(nullptr)
+	, m_pEnvironmentCubeMapSRV(nullptr)
+	, m_pEnvironmentSphere(nullptr)
+	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
 	, m_windowHeight(0)
 	, m_pShaderCompiler(nullptr)
 	, m_pAnnotation(nullptr)
+	, m_projMatrix(DirectX::XMMatrixIdentity())
 	, m_startTime(0)
 	, m_currentTime(0)
 	, m_timeFromLastFrame(0)
@@ -134,15 +140,21 @@ bool Renderer::Init(HWND hWnd)
 		hr = CreateSceneResources();
 	}
 
+
 	bool res = SUCCEEDED(hr);
 
-	if (SUCCEEDED(hr))
+	if (res)
 	{
 		m_pCamera = new Camera();
 		if (!m_pCamera)
 		{
 			res = false;
 		}
+	}
+
+	if (res)
+	{
+		res = InitImGui(hWnd);
 	}
 	
 	if (!res)
@@ -152,24 +164,38 @@ bool Renderer::Init(HWND hWnd)
 
 	SafeRelease(pFactory);
 
-	return SUCCEEDED(hr);
+	return res;
+}
+
+bool Renderer::InitImGui(HWND hWnd)
+{
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+	bool res = ImGui_ImplWin32_Init(hWnd);
+	if (res)
+	{
+		res = ImGui_ImplDX11_Init(m_pDevice, m_pContext);
+	}
+	ImGui::StyleColorsDark();
+	return res;
 }
 
 
 void Renderer::Release()
 {
+	SafeRelease(m_pPBRBuffer);
+	SafeRelease(m_pEnvironmentCubeMapSRV);
+	SafeRelease(m_pEnvironmentCubeMap);
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
+	SafeRelease(m_pMinMagLinearSampler);
+	SafeRelease(m_pEnvironmentPShader);
+	SafeRelease(m_pEnvironmentVShader);
 	SafeRelease(m_pLightBuffer);
-	SafeRelease(m_pCubeIndexBuffer);
-	SafeRelease(m_pCubeVertexBuffer);
-	SafeRelease(m_pPlaneIndexBuffer);
-	SafeRelease(m_pPlaneVertexBuffer);
-	SafeRelease(m_pCubeConstantBuffer);
-	SafeRelease(m_pPlaneConstantBuffer);
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerState);
+	SafeRelease(m_pRasterizerStateFront);
 	SafeRelease(m_pHDRTextureSRV);
 	SafeRelease(m_pHDRTextureRTV);
 	SafeRelease(m_pHDRRenderTarget);
@@ -179,14 +205,21 @@ void Renderer::Release()
 	SafeRelease(m_pSwapChain);
 	SafeRelease(m_pContext);
 	SafeRelease(m_pAnnotation);
+	SafeRelease(m_pConstantBuffer);
 
+	delete m_pEnvironmentSphere;
 	delete m_pShaderCompiler;
 	delete m_pToneMapping;
+	delete m_pCamera;
 
-	if (m_pCamera != nullptr)
+	for (auto& mesh : m_meshes)
 	{
-		delete m_pCamera;
+		delete mesh;
 	}
+
+	ImGui_ImplDX11_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
 
 	if (m_isDebug) 
 	{
@@ -376,6 +409,37 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
+		D3D11_RASTERIZER_DESC rasterizerDesc = {};
+		rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+		rasterizerDesc.CullMode = D3D11_CULL_FRONT;
+		rasterizerDesc.FrontCounterClockwise = false;
+		rasterizerDesc.DepthBias = 0;
+		rasterizerDesc.SlopeScaledDepthBias = 0.0f;
+		rasterizerDesc.DepthBiasClamp = 0.0f;
+		rasterizerDesc.DepthClipEnable = false;
+		rasterizerDesc.ScissorEnable = false;
+		rasterizerDesc.MultisampleEnable = false;
+		rasterizerDesc.AntialiasedLineEnable = false;
+
+		hr = m_pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerStateFront);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_SAMPLER_DESC samplerDesc = {};
+		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+		samplerDesc.MipLODBias = 0;
+		samplerDesc.MinLOD = 0;
+		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+		hr = m_pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
+	}
+
+	if (SUCCEEDED(hr))
+	{
 		D3D11_DEPTH_STENCIL_DESC depthStencilStateDesc = {};
 		depthStencilStateDesc.DepthEnable = true;
 		depthStencilStateDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -407,6 +471,24 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
+		if (m_pShaderCompiler == nullptr)
+		{
+			m_pShaderCompiler = new ShaderCompiler(m_pDevice, m_isDebug);
+		}
+
+		if (!m_pShaderCompiler->CreateVertexAndPixelShaders(
+			"shaders/environment.hlsl",
+			&m_pEnvironmentVShader,
+			&pVSBlob,
+			&m_pEnvironmentPShader
+		))
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
 		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
 			CreateInputElementDesc("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0),
 			CreateInputElementDesc("COLOR", DXGI_FORMAT_R32G32B32A32_FLOAT, sizeof(DirectX::XMFLOAT3)),
@@ -425,7 +507,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	return hr;
 }
 
-HRESULT Renderer::CreateCubeResourses()
+HRESULT Renderer::CreateCubeResourses(Mesh*& cubeMesh)
 {
 	static constexpr Vertex vertices[] = {
 		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f },	{ 0.0f, -1.0f, 0.0f } },
@@ -468,21 +550,34 @@ HRESULT Renderer::CreateCubeResourses()
 		20, 22, 21, 20, 23, 22
 	};
 
-	m_cubeIndexCount = _countof(indices);
+	Mesh* mesh = new Mesh();
+	mesh->indexCount = _countof(indices);
+
 	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc(_countof(vertices) * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
 	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(&vertices);
 
-	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &m_pCubeVertexBuffer);
+	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &mesh->pVertexBuffer);
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(_countof(indices) * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
+		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(mesh->indexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(&indices);
-		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pCubeIndexBuffer);
+		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
 	}
+
+	if (SUCCEEDED(hr))
+	{
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
+		cubeMesh = mesh;
+	}
+	else
+	{
+		delete mesh;
+	}
+
 	return hr;
 }
 
-HRESULT Renderer::CreatePlaneResourses()
+HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 {
 	static constexpr Vertex vertices[] = {
 	{ { -0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
@@ -495,50 +590,164 @@ HRESULT Renderer::CreatePlaneResourses()
 		0, 1, 2, 0, 2, 3
 	};
 
-	m_planeIndexCount = _countof(indices);
+	Mesh* mesh = new Mesh();
+	mesh->indexCount = _countof(indices);
+
 	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc(_countof(vertices) * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
 	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(&vertices);
 
-	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &m_pPlaneVertexBuffer);
+	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &mesh->pVertexBuffer);
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(m_planeIndexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
+		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(mesh->indexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(&indices);
-		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &m_pPlaneIndexBuffer);
+		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
 	}
+
+	if (SUCCEEDED(hr))
+	{
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(15.0f, 1.0f, 15.0f);
+		planeMesh = mesh;
+	}
+	else
+	{
+		delete mesh;
+	}
+	return hr;
+}
+
+
+HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh)
+{
+	std::vector<Vertex> vertices;
+	std::vector<UINT16> indices;
+
+	for (UINT16 latNumber = 0; latNumber <= latitudeBands; ++latNumber)
+	{
+		float theta = latNumber * PI / latitudeBands;
+		float sinTheta = sin(theta);
+		float cosTheta = cos(theta);
+
+		for (UINT16 longNumber = 0; longNumber <= longitudeBands; ++longNumber)
+		{
+			float phi = longNumber * 2 * PI / longitudeBands;
+			float sinPhi = sin(phi);
+			float cosPhi = cos(phi);
+
+			float normalX = cosPhi * sinTheta;
+			float normalY = cosTheta;
+			float normalZ = sinPhi * sinTheta;
+
+			Vertex vs = { { normalX, normalY, normalZ },	
+						  { 0.5f, 0.1f, 0.1f, 1.0f },	
+				          { normalX, normalY, normalZ } };
+
+			vertices.push_back(vs);
+		}
+	}
+
+	for (UINT16 latNumber = 0; latNumber < latitudeBands; ++latNumber)
+	{
+		for (UINT16 longNumber = 0; longNumber < longitudeBands; ++longNumber)
+		{
+			UINT16 first = (latNumber * (longitudeBands + 1)) + longNumber;
+			UINT16 second = first + longitudeBands + 1;
+
+			indices.push_back(first);
+			indices.push_back(first + 1);
+			indices.push_back(second);
+
+			indices.push_back(second + 1);
+			indices.push_back(second);
+			indices.push_back(first + 1);
+		}
+	}
+
+	Mesh* mesh = new Mesh();
+	mesh->indexCount = (UINT)indices.size();
+
+	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc((UINT)vertices.size() * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
+	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(vertices.data());
+
+	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &mesh->pVertexBuffer);
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(mesh->indexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
+		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(indices.data());
+
+		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, 1.0f, 0.0f);
+		sphereMesh = mesh;
+	}
+	else
+	{
+		delete mesh;
+	}
+
 	return hr;
 }
 
 HRESULT Renderer::CreateSceneResources()
 {
+	Mesh* mesh = nullptr;
 
-	HRESULT hr = CreateCubeResourses();
+	HRESULT hr = CreateCubeResourses(mesh);
+
 	if (SUCCEEDED(hr))
 	{
-		hr = CreatePlaneResourses();
+		m_meshes.push_back(mesh);
+		hr = CreatePlaneResourses(mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, mesh);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_meshes.push_back(mesh);
+		hr = CreateSphereResourses(30, 30, m_pEnvironmentSphere);
 	}
 
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pCubeConstantBuffer);
+		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pConstantBuffer);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
+		D3D11_BUFFER_DESC pbrBufferDesc = CreateDefaultBufferDesc(sizeof(PBRBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pPlaneConstantBuffer);
+		PBRBuffer pbrBuffer = {};
+		pbrBuffer.albedo = { 1.0f, 0.71f, 0.29f, 1.0f };
+		pbrBuffer.roughnessMetalness = { 0.1f, 0.1f, 0.0f, 0.0f };
+		pbrBuffer.pbrMode = { 0u, 0u, 0u, 0u };
+
+		D3D11_SUBRESOURCE_DATA pbrBufferData = {};
+		pbrBufferData.pSysMem = &pbrBuffer;
+		pbrBufferData.SysMemPitch = 0;
+		pbrBufferData.SysMemSlicePitch = 0;
+
+		hr = m_pDevice->CreateBuffer(&pbrBufferDesc, &pbrBufferData, &m_pPBRBuffer);
 	}
 
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC lightBufferDesc = CreateDefaultBufferDesc(sizeof(LightBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		m_lights.push_back(PointLight({ -4.0f, -0.25f, 0.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
-		m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
-		m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f },	{ 0.0f, 1.0f, 0.0f, 1.0f },	1.0f));
+		m_lights.push_back(PointLight({ 3.0f, 1.0f, -7.5f },	{ 1.0f, 1.0f, 1.0f, 1.0f },	1.0f));
+
+		//m_lights.push_back(PointLight({ -4.0f, -0.25f, 0.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		//m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
+		//m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
 
 		LightBuffer lightBuffer = {};
 		lightBuffer.lightsCount.x = (UINT)m_lights.size();
@@ -564,6 +773,11 @@ HRESULT Renderer::CreateSceneResources()
 		m_pToneMapping->UseAnnotations(m_pAnnotation);
 	}
 
+	if (SUCCEEDED(hr))
+	{
+		hr = LoadTextureCube("data/maskonaive", &m_pEnvironmentCubeMap, &m_pEnvironmentCubeMapSRV);
+	}
+
 	return hr;
 }
 
@@ -574,6 +788,94 @@ HRESULT Renderer::SetResourceName(ID3D11Resource* pResource, const std::string& 
 		return E_FAIL;
 	}
 	return pResource->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)name.size(), name.c_str());
+}
+
+HRESULT Renderer::LoadTextureCube(
+	const std::string& pathToCubeSrc,
+	ID3D11Texture2D** ppTextureCube,
+	ID3D11ShaderResourceView** ppTextureCubeSRV
+) const
+{
+	std::string edges[6] = { "posx", "negx", "posy", "negy", "posz", "negz" };
+	HRESULT hr = S_OK;
+
+	ID3D11Texture2D* pSrcTexture = nullptr;
+
+	if (SUCCEEDED(hr))
+	{
+		std::string edgeName = pathToCubeSrc + "/" + edges[0] + ".jpg";
+		std::wstring wEdgeName(edgeName.begin(), edgeName.end());
+
+		hr = CreateWICTextureFromFile(m_pDevice, m_pContext, wEdgeName.c_str(), (ID3D11Resource**)&pSrcTexture, nullptr);
+	}
+
+	D3D11_TEXTURE2D_DESC cubeMapDesc = {};
+	if (SUCCEEDED(hr))
+	{
+		D3D11_TEXTURE2D_DESC srcTextureDesc = {};
+		pSrcTexture->GetDesc(&srcTextureDesc);
+
+		cubeMapDesc.Width = srcTextureDesc.Width;
+		cubeMapDesc.Height = srcTextureDesc.Height;
+		cubeMapDesc.Format = srcTextureDesc.Format;
+		cubeMapDesc.MipLevels = 1;
+		cubeMapDesc.ArraySize = 6;
+		cubeMapDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+		cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
+		cubeMapDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+		cubeMapDesc.CPUAccessFlags = 0;
+		cubeMapDesc.SampleDesc.Count = 1;
+		cubeMapDesc.SampleDesc.Quality = 0;
+
+		hr = m_pDevice->CreateTexture2D(&cubeMapDesc, nullptr, ppTextureCube);
+	}
+
+	if (SUCCEEDED(hr) && ppTextureCubeSRV != nullptr)
+	{
+		hr = m_pDevice->CreateShaderResourceView(*ppTextureCube, nullptr, ppTextureCubeSRV);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pContext->CopySubresourceRegion(*ppTextureCube, 0, 0, 0, 0, pSrcTexture, 0, nullptr);
+	}
+
+	SafeRelease(pSrcTexture);
+
+	for (UINT i = 1; i < _countof(edges) && SUCCEEDED(hr); ++i)
+	{
+		std::string edgeName = pathToCubeSrc + "/" + edges[i] + ".jpg";
+		std::wstring wEdgeName(edgeName.begin(), edgeName.end());
+
+		hr = CreateWICTextureFromFile(m_pDevice, m_pContext, wEdgeName.c_str(), (ID3D11Resource**)&pSrcTexture, nullptr);
+
+		if (FAILED(hr))
+		{
+			break;
+		}
+
+		if (m_isDebug)
+		{
+			D3D11_TEXTURE2D_DESC srcTextureDesc = {};
+			pSrcTexture->GetDesc(&srcTextureDesc);
+
+			if (srcTextureDesc.Width != cubeMapDesc.Width
+				|| srcTextureDesc.Height != cubeMapDesc.Height
+				|| srcTextureDesc.Format != cubeMapDesc.Format)
+			{
+				hr = E_FAIL;
+				break;
+			}
+		}
+
+		m_pContext->CopySubresourceRegion(*ppTextureCube, i, 0, 0, 0, pSrcTexture, 0, nullptr);
+
+		SafeRelease(pSrcTexture);
+	}
+
+	SafeRelease(pSrcTexture);
+
+	return hr;
 }
 
 
@@ -641,25 +943,94 @@ void Renderer::Update()
 	m_timeFromLastFrame = time - m_currentTime;
 	m_currentTime = time;
 	
-	FLOAT width = s_near / tanf(s_fov / 2.0f);
-	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
-
-	DirectX::XMMATRIX modelCubeMatrix = DirectX::XMMatrixRotationY(s_PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
-	DirectX::XMMATRIX modelPlaneMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(10.0f, 1.0f, 10.0f);
-	DirectX::XMMATRIX projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
-	DirectX::XMMATRIX viewMatrix = m_pCamera->GetViewMatrix();
-
-	ConstantBuffer constantBuffer = {};
-
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelCubeMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-	m_pContext->UpdateSubresource(m_pCubeConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
-
-	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(modelPlaneMatrix));
-	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(viewMatrix * projMatrix));
-	m_pContext->UpdateSubresource(m_pPlaneConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+	m_meshes[0]->modelMatrix = DirectX::XMMatrixRotationY(PI * (m_currentTime - m_startTime) / 10e6f) * DirectX::XMMatrixTranslation(-7.5f, 0.0f, 0.0f);
+	m_pEnvironmentSphere->modelMatrix = DirectX::XMMatrixTranslation(m_pCamera->GetPosition().x, m_pCamera->GetPosition().y, m_pCamera->GetPosition().z);
 }
 
+
+void Renderer::RenderImGui()
+{
+	m_pAnnotation->BeginEvent(L"imGui");
+	static float bright = 10.0f;
+	static bool isNormal = false, isGeometry = false, isFresnel = false, isAll = true;
+	static float roughness = 0.1f, metalness = 0.1f, rgb[3] = { 1.0f, 0.71f, 0.29f };
+	static UINT pbrMode = 0u;
+
+	static auto updatePBRBuffer = [this]()->void
+	{
+		PBRBuffer pbrBuffer = {};
+		pbrBuffer.roughnessMetalness = { roughness, metalness , 0.0f, 0.0f };
+		pbrBuffer.albedo = { rgb[0], rgb[1], rgb[2], 1.0f };
+		pbrBuffer.pbrMode = { pbrMode, 0u, 0u, 0u };
+		m_pContext->UpdateSubresource(m_pPBRBuffer, 0, nullptr, &pbrBuffer, 0, 0);
+	};
+
+	ImGui_ImplDX11_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+	ImGui::Begin("Menu");
+
+	ImGui::SliderFloat("Brightness", &bright, 0.0f, 100.0f);
+	ChangeLightBrightness(0, bright);
+
+	ImGui::BeginChild("Display modes", ImVec2(0, 125), true);
+	ImGui::Text("Display modes:");
+
+	if (ImGui::Checkbox("Normal distribution function", &isNormal))
+	{
+		isNormal = true;
+		isGeometry = false; 
+		isFresnel = false; 
+		isAll = false;
+
+		pbrMode = 1;
+	}
+	if (ImGui::Checkbox("Geometry function", &isGeometry))
+	{
+		isNormal = false;
+		isGeometry = true;
+		isFresnel = false;
+		isAll = false;
+
+		pbrMode = 2;
+	}
+	if (ImGui::Checkbox("Fresnel function", &isFresnel))
+	{
+		isNormal = false;
+		isGeometry = false;
+		isFresnel = true;
+		isAll = false;
+
+		pbrMode = 3;
+	}
+	if (ImGui::Checkbox("All", &isAll))
+	{
+		isNormal = false;
+		isGeometry = false;
+		isFresnel = false;
+		isAll = true;
+
+		pbrMode = 0;
+	}
+	ImGui::EndChild();
+
+	ImGui::BeginChild("PBR setting", ImVec2(0, 100), true);
+	ImGui::Text("PBR setting:");
+
+	ImGui::SliderFloat("Roughness", &roughness, 0.0f, 1.0f);
+	ImGui::SliderFloat("Metalness", &metalness, 0.0f, 1.0f);
+	ImGui::DragFloat3("Albedo", rgb, 0.02f, 0.0f, 1.0f);
+	
+	ImGui::EndChild();
+
+	ImGui::End();
+	ImGui::Render();
+	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+
+	updatePBRBuffer();
+
+	m_pAnnotation->EndEvent();
+}
 
 void Renderer::Render()
 {
@@ -667,9 +1038,14 @@ void Renderer::Render()
 
 	m_pAnnotation->BeginEvent(L"Draw Scene");
 
+	FLOAT width = s_near / tanf(s_fov / 2.0f);
+	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
+	m_projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
+
 	m_pContext->ClearState();
 
-	m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
+	//m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
+	m_pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
 
 	static constexpr float fillColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
 	m_pContext->ClearRenderTargetView(m_pBackBufferRTV, fillColor);
@@ -693,54 +1069,52 @@ void Renderer::Render()
 	m_pContext->RSSetViewports(1, &viewport);
 	m_pContext->RSSetScissorRects(1, &rect);
 
+	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	m_pContext->IASetInputLayout(m_pInputLayout);
+	m_pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
+
+	RenderEnvironment();
 	RenderScene();
 
 	m_pAnnotation->EndEvent();
 
-	PostProcessing();
+	//PostProcessing();
+
+	RenderImGui();
 
 	m_pSwapChain->Present(0, 0);
 }
 
 void Renderer::RenderScene()
 {
-	ID3D11Buffer* vertexBuffers[] = { m_pCubeVertexBuffer };
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-	m_pContext->IASetInputLayout(m_pInputLayout);
-
 	m_pContext->RSSetState(m_pRasterizerState);
-	m_pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
 
 	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
+	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
-	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-	m_pContext->IASetIndexBuffer(m_pCubeIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+	for (auto& mesh : m_meshes)
+	{
+		ID3D11Buffer* vertexBuffers[] = { mesh->pVertexBuffer };
 
-	ID3D11Buffer* constantBuffers[] = { m_pCubeConstantBuffer, m_pLightBuffer };
+		m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+		m_pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+		ConstantBuffer constantBuffer = {};
 
-	m_pContext->DrawIndexed(m_cubeIndexCount, 0, 0);
+		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
+		DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
+		constantBuffer.cameraPosition = m_pCamera->GetPosition();
+		m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
-
-	ID3D11Buffer* vertexBuffers1[1] = { m_pPlaneVertexBuffer };
-
-	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers1, &stride, &offset);
-	m_pContext->IASetIndexBuffer(m_pPlaneIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-
-	ID3D11Buffer* constantBuffers1[] = { m_pPlaneConstantBuffer, m_pLightBuffer };
-
-	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers1);
-	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers1);
-
-	m_pContext->DrawIndexed(m_planeIndexCount, 0, 0);
+		m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+		m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+		m_pContext->DrawIndexed(mesh->indexCount, 0, 0);
+	}
 }
 
 void Renderer::PostProcessing()
@@ -751,3 +1125,39 @@ void Renderer::PostProcessing()
 
 	m_pAnnotation->EndEvent();
 }
+
+void Renderer::RenderEnvironment()
+{
+	m_pAnnotation->BeginEvent(L"Environment");
+
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+
+	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer };
+
+	m_pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
+	m_pContext->RSSetState(m_pRasterizerStateFront);
+	m_pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+
+	m_pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
+	m_pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);
+
+	ID3D11Buffer* vertexBuffers[] = { m_pEnvironmentSphere->pVertexBuffer };
+
+	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+	m_pContext->IASetIndexBuffer(m_pEnvironmentSphere->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+	ConstantBuffer constantBuffer = {};
+
+	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(m_pEnvironmentSphere->modelMatrix));
+	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
+	constantBuffer.cameraPosition = m_pCamera->GetPosition();
+	m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+
+	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	m_pContext->DrawIndexed(m_pEnvironmentSphere->indexCount, 0, 0);
+
+	m_pAnnotation->EndEvent();
+}
+

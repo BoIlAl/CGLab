@@ -9,6 +9,7 @@ public:
     ~Camera();
 
     DirectX::XMMATRIX GetViewMatrix() const;
+    DirectX::XMFLOAT4 GetPosition() const;
 
     void MoveVertical(float delta);
     void MoveHorizontal(float delta);

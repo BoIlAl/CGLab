@@ -32,7 +32,7 @@ void Camera::MovePerpendicular(float delta)
 
 void Camera::Rotate(float horisontalAngle, float verticalAngle)
 {
-	m_vertAngle += verticalAngle;
+	m_vertAngle -= verticalAngle;
 	m_horzAngle -= horisontalAngle;
 
 	Update();
@@ -90,6 +90,14 @@ DirectX::FXMVECTOR Camera::CalcProjectedDir() const
 DirectX::XMMATRIX Camera::GetViewMatrix() const
 {
 	return DirectX::XMMatrixLookToLH(m_eye, m_viewDir, m_up);
+}
+
+DirectX::XMFLOAT4 Camera::GetPosition() const
+{
+	DirectX::XMFLOAT4 position;
+	DirectX::XMStoreFloat4(&position, m_eye);
+
+	return position;
 }
 
 Camera::~Camera()

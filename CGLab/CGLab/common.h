@@ -1,5 +1,6 @@
 #pragma once
 
+static constexpr FLOAT PI = 3.14159265359f;
 
 template <class T>
 void SafeRelease(T*& ptr)

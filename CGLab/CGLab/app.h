@@ -21,11 +21,11 @@ public:
 	void ZHandle();
 	
 	void MouseWheel(int delta);
-	void MouseLButtonPressHandle(int x, int y);
+	void MouseRButtonPressHandle(int x, int y);
 	void MouseMovementHandle(int x, int y);
-	void MouseLButtonUpHandle(int x, int y);
+	void MouseRButtonUpHandle(int x, int y);
 
-	void NextLightBrightness();
+	void AddButtonHandle();
 
 private:
 	App(HWND hWnd);
@@ -35,7 +35,7 @@ private:
 	bool m_isPressed;
 
 	static constexpr float m_deltaMovement = 0.2f;
-	static constexpr float m_deltaRotate = 0.002f;
+	static constexpr float m_deltaRotate = 0.001f;
 	static constexpr float m_deltaZoom = 0.002f;
 
 	struct Deleter
