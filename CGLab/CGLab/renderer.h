@@ -3,8 +3,8 @@
 #include "framework.h"
 #include "light.h"
 #include "common.h"
+#include "rendererContext.h"
 
-struct Vertex;
 struct IDXGIFactory;
 struct ID3D11Device;
 struct ID3D11DeviceContext;
@@ -29,13 +29,6 @@ class Camera;
 
 static constexpr UINT MaxLightNum = 3;
 
-struct Vertex
-{
-	DirectX::XMFLOAT3 position;
-	DirectX::XMFLOAT4 color;
-	DirectX::XMFLOAT3 normal;
-};
-
 
 // TODO: divide into renderer and context
 class Renderer
@@ -46,61 +39,29 @@ public:
 
 	void Release();
 
-	~Renderer();
-
 	void Render();
 	bool Resize(UINT newWidth, UINT newHeight);
 
 	void ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness);
 
 	Camera* getCamera();
-	inline ID3D11Device* GetDevice() const { return m_pDevice; }
-	inline ID3D11DeviceContext* GetContext() const { return m_pContext; }
-
-	HRESULT CreateSphereBuffers(
-		UINT16 latitudeBands,
-		UINT16 longitudeBands,
-		ID3D11Buffer** ppVertexBuffer,
-		ID3D11Buffer** ppIndexBuffer,
-		UINT* pIndexCount
-	) const;
-
-
-	HRESULT LoadTextureCube(
-		const std::string& pathToCubeSrc,
-		ID3D11Texture2D** ppTextureCube,
-		ID3D11ShaderResourceView** ppTextureCubeSRV
-	) const;
+	inline RendererContext* GetContext() const { return m_pContext; }
 
 private:
 	Renderer();
+	~Renderer();
 
 	bool Init(HWND hWnd);
 	bool InitImGui(HWND hWnd);
 
 	void RenderImGui();
 
-	HRESULT CreateDevice(IDXGIFactory* pFactory);
 	HRESULT CreateSwapChain(IDXGIFactory* pFactory, HWND hWnd);
 	HRESULT CreateBackBuffer();
 	HRESULT CreatePipelineStateObjects();
 
-	struct Mesh
-	{
-		ID3D11Buffer* pVertexBuffer = nullptr;
-		ID3D11Buffer* pIndexBuffer = nullptr;
-		UINT indexCount = 0;
-		DirectX::XMMATRIX modelMatrix;
-
-		~Mesh() {
-			SafeRelease(pIndexBuffer);
-			SafeRelease(pVertexBuffer);
-		}
-	};
-
 	HRESULT CreateCubeResourses(Mesh*& cubeMesh);
 	HRESULT CreatePlaneResourses(Mesh*& planeMesh);
-	HRESULT CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh);
 
 	HRESULT CreateSceneResources();
 
@@ -121,8 +82,7 @@ private:
 	static constexpr FLOAT s_fov = PI / 2.0f;
 
 private:
-	ID3D11Device* m_pDevice;
-	ID3D11DeviceContext* m_pContext;
+	RendererContext* m_pContext;
 
 	IDXGISwapChain* m_pSwapChain;
 	ID3D11RenderTargetView* m_pBackBufferRTV;
@@ -161,10 +121,6 @@ private:
 	UINT m_windowWidth;
 	UINT m_windowHeight;
 
-	ShaderCompiler* m_pShaderCompiler;
-
-	ID3DUserDefinedAnnotation* m_pAnnotation;
-
 	DirectX::XMMATRIX m_projMatrix;
 
 	size_t m_startTime;
@@ -172,8 +128,6 @@ private:
 	size_t m_timeFromLastFrame;
 
 	Camera* m_pCamera;
-
-	bool m_isDebug;
 
 	ToneMapping* m_pToneMapping;
 

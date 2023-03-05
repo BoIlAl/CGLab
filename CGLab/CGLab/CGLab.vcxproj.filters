@@ -19,6 +19,9 @@
     <Filter Include="Исходные файлы\imGui">
       <UniqueIdentifier>{20845221-2a7c-45fa-bfd4-7417029c2730}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Файлы заголовков\stb">
+      <UniqueIdentifier>{3e1fbf1b-3bc7-46c6-a88d-24cf5df12a7a}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -78,6 +81,15 @@
     <ClInclude Include="imGui\imconfig.h">
       <Filter>Исходные файлы\imGui</Filter>
     </ClInclude>
+    <ClInclude Include="rendererContext.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="stb\stb_image.h">
+      <Filter>Файлы заголовков\stb</Filter>
+    </ClInclude>
+    <ClInclude Include="HDRITextureLoader.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CGLab.cpp">
@@ -122,6 +134,12 @@
     <ClCompile Include="imGui\imgui.cpp">
       <Filter>Исходные файлы\imGui</Filter>
     </ClCompile>
+    <ClCompile Include="rendererContext.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="HDRITextureLoader.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="CGLab.rc">
@@ -150,6 +168,9 @@
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\environment.hlsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\hdrToCube.hlsl">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

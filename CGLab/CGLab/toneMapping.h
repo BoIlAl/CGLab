@@ -1,6 +1,7 @@
 #pragma once
 
 #include "framework.h"
+#include "rendererContext.h"
 
 struct ID3D11Device;
 struct ID3D11DeviceContext;
@@ -20,8 +21,7 @@ class ShaderCompiler;
 class ToneMapping
 {
 public:
-	static ToneMapping* CreateToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, 
-									      ShaderCompiler* pShaderCompiler, UINT maxWindowSize);
+	static ToneMapping* CreateToneMapping(RendererContext* pContext, UINT maxWindowSize);
 
 	~ToneMapping();
 
@@ -33,12 +33,10 @@ public:
 		FLOAT deltaTime
 	);
 
-	void UseAnnotations(ID3DUserDefinedAnnotation* pAnnotation);
-
 private:
-	ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT maxWindowSize);
+	ToneMapping(RendererContext* pContext, UINT maxWindowSize);
 
-	HRESULT CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler);
+	HRESULT CreatePipelineStateObjects();
 	HRESULT CreateResources();
 
 	FLOAT EyeAdaptation(FLOAT currentExposure, FLOAT deltaTime) const;
@@ -52,12 +50,8 @@ private:
 
 	UINT DefaineMostDetailedMip(UINT width, UINT height) const;
 
-	void BeginEvent(LPCWSTR name) const;
-	void EndEvent() const;
-
 private:
-	ID3D11Device* m_pDevice;
-	ID3D11DeviceContext* m_pContext;
+	RendererContext* m_pContext;
 
 	ID3D11RasterizerState* m_pRasterizerState;
 	ID3D11SamplerState* m_pMinMagLinearSampler;
@@ -75,8 +69,6 @@ private:
 
 	ID3D11VertexShader* m_pDownSampleVS;
 	ID3D11PixelShader* m_pDownSamplePS;
-
-	ID3DUserDefinedAnnotation* m_pAnnotation;
 
 	UINT m_textureSize;
 	UINT m_mipsNum;
