@@ -57,6 +57,7 @@ public:
 	HRESULT LoadTextureCubeFromHDRI(
 		const std::string& fileName,
 		ID3D11Texture2D** ppTextureCube,
+		UINT cubeTextureSize,
 		ID3D11ShaderResourceView** ppTextureCubeSRV
 	) const;
 

@@ -8,10 +8,6 @@
 #include "HDRITextureLoader.h"
 
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
-
 RendererContext* RendererContext::CreateContext(IDXGIFactory* pFactory)
 {
 	RendererContext* pContext = new RendererContext();
@@ -251,76 +247,11 @@ HRESULT RendererContext::LoadTextureCube(
 HRESULT RendererContext::LoadTextureCubeFromHDRI(
 	const std::string& fileName,
 	ID3D11Texture2D** ppTextureCube,
+	UINT cubeTextureSize,
 	ID3D11ShaderResourceView** ppTextureCubeSRV
 ) const
 {
-	int width = 0;
-	int height = 0;
-	int n = 0;
-	float* pImageData = stbi_loadf(fileName.c_str(), &width, &height, &n, 4);
-
-	HRESULT hr = pImageData != nullptr ? S_OK : E_FAIL;
-
-	ID3D11Texture2D* pHDRTextureSrc = nullptr;
-	ID3D11ShaderResourceView* pHDRTextureSrcSRV = nullptr;
-
-	if (SUCCEEDED(hr))
-	{
-		D3D11_TEXTURE2D_DESC hdrTextureDesc = CreateDefaultTexture2DDesc(
-			DXGI_FORMAT_R32G32B32A32_FLOAT,
-			width, height,
-			D3D11_BIND_SHADER_RESOURCE
-		);
-
-		D3D11_SUBRESOURCE_DATA hdrTextureData = {};
-		hdrTextureData.pSysMem = pImageData;
-		hdrTextureData.SysMemPitch = 4u * width * sizeof(float);
-		hdrTextureData.SysMemSlicePitch = 0;
-
-		hr = m_pDevice->CreateTexture2D(&hdrTextureDesc, &hdrTextureData, &pHDRTextureSrc);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		hr = m_pDevice->CreateShaderResourceView(pHDRTextureSrc, nullptr, &pHDRTextureSrcSRV);
-	}
-
-
-	if (SUCCEEDED(hr))
-	{
-		D3D11_TEXTURE2D_DESC cubeTextureDesc = CreateDefaultTexture2DDesc(
-			DXGI_FORMAT_R32G32B32A32_FLOAT,
-			512, 512,
-			D3D11_BIND_SHADER_RESOURCE
-		);
-		cubeTextureDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
-		cubeTextureDesc.ArraySize = 6;
-
-		hr = m_pDevice->CreateTexture2D(&cubeTextureDesc, nullptr, ppTextureCube);
-	}
-
-	ID3D11Texture2D* pCubeEdgeCopyDst = nullptr;
-
-	if (SUCCEEDED(hr))
-	{
-		D3D11_TEXTURE2D_DESC cubeEdgeCopyDstDesc = CreateDefaultTexture2DDesc(
-			DXGI_FORMAT_R32G32B32A32_FLOAT,
-			512, 512,
-			D3D11_BIND_RENDER_TARGET
-		);
-
-		hr = m_pDevice->CreateTexture2D(&cubeEdgeCopyDstDesc, nullptr, &pCubeEdgeCopyDst);
-	}
-
-
-
-
-	SafeRelease(pCubeEdgeCopyDst);
-	SafeRelease(pHDRTextureSrcSRV);
-	SafeRelease(pHDRTextureSrc);
-
-	delete pImageData;
-	return hr;
+	return m_pHDRITextureLoader->LoadTextureCubeFromHDRI(fileName, ppTextureCube, cubeTextureSize, ppTextureCubeSRV);
 }
 
 

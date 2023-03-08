@@ -620,15 +620,12 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
-		hr = m_pContext->LoadTextureCube("data/maskonaive", &m_pEnvironmentCubeMap, &m_pEnvironmentCubeMapSRV);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		ID3D11Texture2D* pTex = nullptr;
-		ID3D11ShaderResourceView* pTexSRV = nullptr;
-
-		hr = m_pContext->LoadTextureCubeFromHDRI("data/hdri/je_gray_02_4k.hdr", &pTex, &pTexSRV);
+		hr = m_pContext->LoadTextureCubeFromHDRI(
+			"data/hdri/je_gray_02_4k.hdr",
+			&m_pEnvironmentCubeMap,
+			512u,
+			&m_pEnvironmentCubeMapSRV
+		);
 	}
 
 	return hr;
@@ -812,8 +809,8 @@ void Renderer::Render()
 
 	pContext->ClearState();
 
-	//m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
-	pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
+	pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
+	//pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
 
 	static constexpr float fillColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
 	pContext->ClearRenderTargetView(m_pBackBufferRTV, fillColor);
@@ -846,7 +843,7 @@ void Renderer::Render()
 
 	m_pContext->EndEvent();
 
-	//PostProcessing();
+	PostProcessing();
 
 	RenderImGui();
 
