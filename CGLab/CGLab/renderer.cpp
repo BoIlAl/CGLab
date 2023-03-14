@@ -86,6 +86,8 @@ Renderer::Renderer()
 	, m_pMinMagLinearSampler(nullptr)
 	, m_pEnvironmentCubeMap(nullptr)
 	, m_pEnvironmentCubeMapSRV(nullptr)
+	, m_pIrradianceMap(nullptr)
+	, m_pIrradianceMapSRV(nullptr)
 	, m_pEnvironmentSphere(nullptr)
 	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
@@ -183,6 +185,8 @@ void Renderer::Release()
 	SafeRelease(m_pPBRBuffer);
 	SafeRelease(m_pEnvironmentCubeMapSRV);
 	SafeRelease(m_pEnvironmentCubeMap);
+	SafeRelease(m_pIrradianceMap);
+	SafeRelease(m_pIrradianceMapSRV);
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
@@ -526,7 +530,7 @@ HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 
 	if (SUCCEEDED(hr))
 	{
-		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(15.0f, 1.0f, 15.0f);
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(30.0f, 1.0f, 30.0f);
 		planeMesh = mesh;
 	}
 	else
@@ -628,6 +632,16 @@ HRESULT Renderer::CreateSceneResources()
 		);
 	}
 
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pContext->CalculateIrradianceMap(
+			m_pEnvironmentCubeMapSRV,
+			&m_pIrradianceMap,
+			32u,
+			&m_pIrradianceMapSRV
+		);
+	}
+
 	return hr;
 }
 
@@ -676,7 +690,7 @@ void Renderer::ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness)
 	FillLightBuffer();
 }
 
-Camera* Renderer::getCamera()
+Camera* Renderer::GetCamera()
 {
 	return m_pCamera;
 }
@@ -685,7 +699,7 @@ Camera* Renderer::getCamera()
 void Renderer::FillLightBuffer()
 {
 	static LightBuffer lightBuffer = {};
-	lightBuffer.lightsCount.x = (UINT)m_lights.size();
+	lightBuffer.lightsCount.x = 0;
 	memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
 
 	m_pContext->GetContext()->UpdateSubresource(m_pLightBuffer, 0, nullptr, &lightBuffer, 0, 0);
@@ -861,6 +875,9 @@ void Renderer::RenderScene()
 
 	pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	pContext->PSSetShader(m_pPixelShader, nullptr, 0);
+
+	pContext->PSSetShaderResources(0, 1, &m_pIrradianceMapSRV);
+	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 

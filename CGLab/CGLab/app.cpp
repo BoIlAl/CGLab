@@ -37,33 +37,33 @@ void App::Render()
 void App::VerticalArrowHandle(bool isUpArrow)
 {
 	if (isUpArrow)
-		m_pRenderer->getCamera()->MoveVertical(m_deltaMovement);
+		m_pRenderer->GetCamera()->MoveVertical(m_deltaMovement);
 	else
-		m_pRenderer->getCamera()->MoveVertical(-m_deltaMovement);
+		m_pRenderer->GetCamera()->MoveVertical(-m_deltaMovement);
 	
 }
 
 void App::HorizontalArrowHandle(bool isLeftArrow)
 {
 	if(isLeftArrow)
-		m_pRenderer->getCamera()->MoveHorizontal(m_deltaMovement);
+		m_pRenderer->GetCamera()->MoveHorizontal(m_deltaMovement);
 	else
-		m_pRenderer->getCamera()->MoveHorizontal(-m_deltaMovement);
+		m_pRenderer->GetCamera()->MoveHorizontal(-m_deltaMovement);
 }
 
 void App::XHandle()
 {
-	m_pRenderer->getCamera()->MovePerpendicular(m_deltaMovement);
+	m_pRenderer->GetCamera()->MovePerpendicular(m_deltaMovement);
 }
 
 void App::ZHandle()
 {
-	m_pRenderer->getCamera()->MovePerpendicular(-m_deltaMovement);
+	m_pRenderer->GetCamera()->MovePerpendicular(-m_deltaMovement);
 }
 
 void App::MouseWheel(int delta)
 {
-	m_pRenderer->getCamera()->Zoom(m_deltaZoom * (float)delta);
+	m_pRenderer->GetCamera()->Zoom(m_deltaZoom * (float)delta);
 }
 
 void App::MouseRButtonPressHandle(int x, int y)
@@ -77,7 +77,7 @@ void App::MouseMovementHandle(int x, int y)
 {
 	if (!m_isPressed)
 		return;
-	m_pRenderer->getCamera()->Rotate(m_deltaRotate*(float)(x - m_xMouse), m_deltaRotate * (float)(y - m_yMouse));
+	m_pRenderer->GetCamera()->Rotate(m_deltaRotate*(float)(x - m_xMouse), m_deltaRotate * (float)(y - m_yMouse));
 	m_xMouse = x;
 	m_yMouse = y;
 }

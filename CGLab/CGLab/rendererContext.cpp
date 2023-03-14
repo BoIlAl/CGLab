@@ -57,8 +57,10 @@ RendererContext::~RendererContext()
 			SafeRelease(pDebug);
 		}
 	}
-
-	SafeRelease(m_pDevice);
+	else
+	{
+		SafeRelease(m_pDevice);
+	}
 }
 
 
@@ -252,6 +254,16 @@ HRESULT RendererContext::LoadTextureCubeFromHDRI(
 ) const
 {
 	return m_pHDRITextureLoader->LoadTextureCubeFromHDRI(fileName, ppTextureCube, cubeTextureSize, ppTextureCubeSRV);
+}
+
+HRESULT RendererContext::CalculateIrradianceMap(
+	ID3D11ShaderResourceView* pTextureCubeSRV,
+	ID3D11Texture2D** ppIrradianceMap,
+	UINT cubeTextureSize,
+	ID3D11ShaderResourceView** ppIrradianceMapSRV
+) const
+{
+	return m_pHDRITextureLoader->CalculateIrradianceMap(pTextureCubeSRV, ppIrradianceMap, cubeTextureSize, ppIrradianceMapSRV);
 }
 
 

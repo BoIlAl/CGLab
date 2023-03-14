@@ -44,7 +44,7 @@ public:
 
 	void ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness);
 
-	Camera* getCamera();
+	Camera* GetCamera();
 	inline RendererContext* GetContext() const { return m_pContext; }
 
 private:
@@ -115,6 +115,8 @@ private:
 
 	ID3D11Texture2D* m_pEnvironmentCubeMap;
 	ID3D11ShaderResourceView* m_pEnvironmentCubeMapSRV;
+	ID3D11Texture2D* m_pIrradianceMap;
+	ID3D11ShaderResourceView* m_pIrradianceMapSRV;
 
 	ID3D11Buffer* m_pPBRBuffer;
 

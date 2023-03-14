@@ -61,6 +61,13 @@ public:
 		ID3D11ShaderResourceView** ppTextureCubeSRV
 	) const;
 
+	HRESULT CalculateIrradianceMap(
+		ID3D11ShaderResourceView* pTextureCubeSRV,
+		ID3D11Texture2D** ppIrradianceMap,
+		UINT cubeTextureSize,
+		ID3D11ShaderResourceView** ppIrradianceMapSRV
+	) const;
+
 	HRESULT CreateSphereMesh(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh) const;
 
 private:

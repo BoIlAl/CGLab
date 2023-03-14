@@ -18,7 +18,7 @@ struct VSOut
 
 float L(float3 color)
 {
-    return dot(color, RGB_C);
+    return max(dot(color, RGB_C), 0.0f);
 }
 
 VSOut VS(VSIn input)

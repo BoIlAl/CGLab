@@ -17,6 +17,13 @@ public:
 		ID3D11ShaderResourceView** ppTextureCubeSRV
 	);
 
+	HRESULT CalculateIrradianceMap(
+		ID3D11ShaderResourceView* pTextureCubeSRV,
+		ID3D11Texture2D** ppIrradianceMap,
+		UINT cubeTextureSize,
+		ID3D11ShaderResourceView** ppIrradianceMapSRV
+	);
+
 private:
 	HDRITextureLoader(RendererContext* pContext);
 
@@ -25,6 +32,7 @@ private:
 	HRESULT CreatePipelineStateObjects();
 	HRESULT CreateResources();
 
+	void RenderIrradiance(ID3D11ShaderResourceView* pHDRTextureSrcSRV, ID3D11Texture2D* pTextureCube, UINT textureSize);
 	void Render(ID3D11ShaderResourceView* pHDRTextureSrcSRV, ID3D11Texture2D* pTextureCube, UINT textureSize);
 
 private:
@@ -34,13 +42,19 @@ private:
 
 	ID3D11InputLayout* m_pInputLayout;
 
-	ID3D11VertexShader* m_pVertexShader;
-	ID3D11PixelShader* m_pPixelShader;
+	ID3D11VertexShader* m_pToCubeVS;
+	ID3D11PixelShader* m_pToCubePS;
+
+	ID3D11VertexShader* m_pIrradianceVS;
+	ID3D11PixelShader* m_pIrradiancePS;
 
 	ID3D11SamplerState* m_pMinMagLinearSamplerState;
 
 	ID3D11Texture2D* m_pTmpCubeEdge;
 	ID3D11RenderTargetView* m_pTmpCubeEdgeRTV;
+
+	ID3D11Texture2D* m_pTmpCubeEdge32;
+	ID3D11RenderTargetView* m_pTmpCubeEdge32RTV;
 
 	ID3D11Buffer* m_pConstantBuffer;
 
