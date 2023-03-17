@@ -699,7 +699,7 @@ Camera* Renderer::GetCamera()
 void Renderer::FillLightBuffer()
 {
 	static LightBuffer lightBuffer = {};
-	lightBuffer.lightsCount.x = 0;
+	lightBuffer.lightsCount.x = 1;
 	memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
 
 	m_pContext->GetContext()->UpdateSubresource(m_pLightBuffer, 0, nullptr, &lightBuffer, 0, 0);
@@ -731,14 +731,14 @@ void Renderer::RenderImGui()
 	static float bright = 10.0f;
 	static bool isNormal = false, isGeometry = false, isFresnel = false, isAll = true;
 	static float roughness = 0.1f, metalness = 0.1f, rgb[3] = { 1.0f, 0.71f, 0.29f };
-	static UINT pbrMode = 0u;
+	static int pbrMode = 0; // на самом деле UINT pbrMode
 
 	static auto updatePBRBuffer = [this]()->void
 	{
 		PBRBuffer pbrBuffer = {};
 		pbrBuffer.roughnessMetalness = { roughness, metalness , 0.0f, 0.0f };
 		pbrBuffer.albedo = { rgb[0], rgb[1], rgb[2], 1.0f };
-		pbrBuffer.pbrMode = { pbrMode, 0u, 0u, 0u };
+		pbrBuffer.pbrMode = { (UINT)pbrMode, 0u, 0u, 0u }; 
 		m_pContext->GetContext()->UpdateSubresource(m_pPBRBuffer, 0, nullptr, &pbrBuffer, 0, 0);
 	};
 
@@ -753,42 +753,11 @@ void Renderer::RenderImGui()
 	ImGui::BeginChild("Display modes", ImVec2(0, 125), true);
 	ImGui::Text("Display modes:");
 
-	if (ImGui::Checkbox("Normal distribution function", &isNormal))
-	{
-		isNormal = true;
-		isGeometry = false; 
-		isFresnel = false; 
-		isAll = false;
+	ImGui::RadioButton("Normal distribution function", &pbrMode, 1);
+	ImGui::RadioButton("Geometry function", &pbrMode, 2);
+	ImGui::RadioButton("Fresnel function", &pbrMode, 3);
+	ImGui::RadioButton("All", &pbrMode, 0);
 
-		pbrMode = 1;
-	}
-	if (ImGui::Checkbox("Geometry function", &isGeometry))
-	{
-		isNormal = false;
-		isGeometry = true;
-		isFresnel = false;
-		isAll = false;
-
-		pbrMode = 2;
-	}
-	if (ImGui::Checkbox("Fresnel function", &isFresnel))
-	{
-		isNormal = false;
-		isGeometry = false;
-		isFresnel = true;
-		isAll = false;
-
-		pbrMode = 3;
-	}
-	if (ImGui::Checkbox("All", &isAll))
-	{
-		isNormal = false;
-		isGeometry = false;
-		isFresnel = false;
-		isAll = true;
-
-		pbrMode = 0;
-	}
 	ImGui::EndChild();
 
 	ImGui::BeginChild("PBR setting", ImVec2(0, 100), true);

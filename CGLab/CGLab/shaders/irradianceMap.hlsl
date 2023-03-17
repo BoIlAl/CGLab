@@ -1,7 +1,7 @@
 static const float PI = 3.14159265f;
 
 static const uint N1 = 800;
-static const uint N2 = 200;
+static const uint N2 = 300;
 
 TextureCube Cubemap : register(t0);
 
