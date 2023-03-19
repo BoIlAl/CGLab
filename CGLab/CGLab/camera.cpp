@@ -3,11 +3,12 @@
 #include "Camera.h"
 
 
-Camera::Camera() : m_eye(DirectX::XMVectorSet(0.0f, 1.0f, -15.0f, 1.0f)),
-m_viewDir(DirectX::XMVector3Normalize(DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f))),
-m_up(DirectX::XMVector3Normalize(DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f))),
-m_vertAngle(0.0f),
-m_horzAngle(0.0f)
+Camera::Camera()
+	: m_eye(DirectX::XMVectorSet(0.0f, 1.0f, -15.0f, 1.0f))
+	, m_viewDir(DirectX::XMVector3Normalize(DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f)))
+	, m_up(DirectX::XMVector3Normalize(DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f)))
+	, m_vertAngle(0.0f)
+	, m_horzAngle(0.0f)
 {
 	Update();
 }

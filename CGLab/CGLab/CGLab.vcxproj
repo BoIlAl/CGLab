@@ -60,6 +60,7 @@
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -76,6 +77,7 @@
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <AdditionalIncludeDirectories>stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -91,6 +93,7 @@
     <ClInclude Include="CGLab.h" />
     <ClInclude Include="common.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="HDRITextureLoader.h" />
     <ClInclude Include="imGui\imconfig.h" />
     <ClInclude Include="imGui\imgui.h" />
     <ClInclude Include="imGui\imgui_impl_dx11.h" />
@@ -101,7 +104,9 @@
     <ClInclude Include="imGui\imstb_truetype.h" />
     <ClInclude Include="light.h" />
     <ClInclude Include="renderer.h" />
+    <ClInclude Include="rendererContext.h" />
     <ClInclude Include="shaderCompiler.h" />
+    <ClInclude Include="stb\stb_image.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="toneMapping.h" />
     <ClInclude Include="WICTextureLoader.h" />
@@ -110,6 +115,7 @@
     <ClCompile Include="app.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="CGLab.cpp" />
+    <ClCompile Include="HDRITextureLoader.cpp" />
     <ClCompile Include="imGui\imgui.cpp" />
     <ClCompile Include="imGui\imgui_draw.cpp" />
     <ClCompile Include="imGui\imgui_impl_dx11.cpp" />
@@ -118,6 +124,7 @@
     <ClCompile Include="imGui\imgui_widgets.cpp" />
     <ClCompile Include="light.cpp" />
     <ClCompile Include="renderer.cpp" />
+    <ClCompile Include="rendererContext.cpp" />
     <ClCompile Include="shaderCompiler.cpp" />
     <ClCompile Include="toneMapping.cpp" />
     <ClCompile Include="WICTextureLoader.cpp" />
@@ -156,6 +163,22 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\environment.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\hdrToCube.hlsl">
+      <FileType>Document</FileType>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">5.0</ShaderModel>
+      <ShaderModel Condition="'$(Configuration)|$(Platform)'=='Release|x64'">5.0</ShaderModel>
+      <EntryPointName Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">PS</EntryPointName>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+      </ObjectFileOutput>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\irradianceMap.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

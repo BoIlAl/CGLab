@@ -13,6 +13,30 @@ void SafeRelease(T*& ptr)
 }
 
 
+inline D3D11_TEXTURE2D_DESC CreateDefaultTexture2DDesc(
+	DXGI_FORMAT format,
+	UINT width,
+	UINT height,
+	UINT bindFlags
+)
+{
+	D3D11_TEXTURE2D_DESC desc = {};
+	desc.Format = format;
+	desc.Width = width;
+	desc.Height = height;
+	desc.BindFlags = bindFlags;
+	desc.Usage = D3D11_USAGE_DEFAULT;
+	desc.CPUAccessFlags = 0;
+	desc.MiscFlags = 0;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.SampleDesc.Count = 1;
+	desc.SampleDesc.Quality = 0;
+
+	return desc;
+}
+
+
 inline D3D11_BUFFER_DESC CreateDefaultBufferDesc(UINT size, UINT bindFlag)
 {
 	D3D11_BUFFER_DESC desc = {};

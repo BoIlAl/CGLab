@@ -2,6 +2,8 @@ static const uint MaxLightNum = 3;
 
 static const float PI = 3.14159265f;
 
+TextureCube DiffuseIrradianceMap : register(t0);
+
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 modelMatrix;
@@ -30,6 +32,8 @@ cbuffer PBRParams : register(b2)
     
     uint4 pbrMode; // r - mode : 1 - Normal Distribution, 2 - Geometry, 3 - Fresnel, Overwise - All
 };
+
+SamplerState MinMagLinearSampler : register(s0);
 
 
 struct VSIn
@@ -90,12 +94,22 @@ float GeometryFunction(float3 normal, float3 dirToView, float3 dirToLight, float
 }
 
 
-float3 FresnelFunction(float3 dirToView, float3 halfVector, float3 metalF0, float metalness)
+float3 FresnelSchlickRoughnessFunction(float3 dirToView, float3 normal, float3 metalF0, float metalness, float roughness)
 {
     metalness = saturate(metalness);
+    float invRoughness = max(1 - roughness, 0.001f);
     
     float3 F0 = max((0.04f, 0.04f, 0.04f) * (1 - metalness) + metalF0 * metalness, float3(0.0f, 0.0f, 0.0f));
     
+    return F0 + (max(float3(invRoughness, invRoughness, invRoughness), F0) - F0) * pow(1 - dot(dirToView, normal), 5.0f);
+}
+
+float3 FresnelFunction(float3 dirToView, float3 halfVector, float3 metalF0, float metalness)
+{
+    metalness = saturate(metalness);
+
+    float3 F0 = max((0.04f, 0.04f, 0.04f) * (1 - metalness) + metalF0 * metalness, float3(0.0f, 0.0f, 0.0f));
+
     return F0 + (1 - F0) * pow(1 - dot(dirToView, halfVector), 5.0f);
 }
 
@@ -152,5 +166,18 @@ float4 PS(VSOut input) : SV_TARGET
         resultColor += BRDF(input.worldPosition.xyz, lights[i].position, normal) * lightInpact;
     }
     
-    return float4(resultColor, 1.0f);
+    float3 kS = FresnelSchlickRoughnessFunction(
+        normalize(cameraPosition - input.worldPosition.xyz), 
+        normal, 
+        albedo, 
+        roughnessMetalness.g, 
+        roughnessMetalness.r
+    );
+    float3 kD = float3(1.0, 1.0, 1.0) - saturate(kS);
+    kD *= 1.0 - roughnessMetalness.g;
+    float3 irradiance = DiffuseIrradianceMap.Sample(MinMagLinearSampler, normal).rgb;
+    float3 diffuse = irradiance * albedo.xyz;
+    float3 ambient = kD * diffuse;
+    
+    return float4(resultColor + ambient, 1.0f);
 }

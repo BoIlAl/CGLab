@@ -65,8 +65,7 @@ void Renderer::DeleteRenderer(Renderer*& pRenderer)
 }
 
 Renderer::Renderer()
-	: m_pDevice(nullptr)
-	, m_pContext(nullptr)
+	: m_pContext(nullptr)
 	, m_pSwapChain(nullptr)
 	, m_pBackBufferRTV(nullptr)
 	, m_pDepthTexture(nullptr)
@@ -87,22 +86,17 @@ Renderer::Renderer()
 	, m_pMinMagLinearSampler(nullptr)
 	, m_pEnvironmentCubeMap(nullptr)
 	, m_pEnvironmentCubeMapSRV(nullptr)
+	, m_pIrradianceMap(nullptr)
+	, m_pIrradianceMapSRV(nullptr)
 	, m_pEnvironmentSphere(nullptr)
 	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
 	, m_windowHeight(0)
-	, m_pShaderCompiler(nullptr)
-	, m_pAnnotation(nullptr)
 	, m_projMatrix(DirectX::XMMatrixIdentity())
 	, m_startTime(0)
 	, m_currentTime(0)
 	, m_timeFromLastFrame(0)
 	, m_pCamera(nullptr)
-#ifdef _DEBUG
-	, m_isDebug(true)
-#else
-	, m_isDebug(false)
-#endif
 	, m_pToneMapping(nullptr)
 {}
 
@@ -117,7 +111,12 @@ bool Renderer::Init(HWND hWnd)
 	
 	if (SUCCEEDED(hr))
 	{
-		hr = CreateDevice(pFactory);
+		m_pContext = RendererContext::CreateContext(pFactory);
+
+		if (m_pContext == nullptr)
+		{
+			hr = E_FAIL;
+		}
 	}
 
 	if (SUCCEEDED(hr))
@@ -174,7 +173,7 @@ bool Renderer::InitImGui(HWND hWnd)
 	bool res = ImGui_ImplWin32_Init(hWnd);
 	if (res)
 	{
-		res = ImGui_ImplDX11_Init(m_pDevice, m_pContext);
+		res = ImGui_ImplDX11_Init(m_pContext->GetDevice(), m_pContext->GetContext());
 	}
 	ImGui::StyleColorsDark();
 	return res;
@@ -186,6 +185,8 @@ void Renderer::Release()
 	SafeRelease(m_pPBRBuffer);
 	SafeRelease(m_pEnvironmentCubeMapSRV);
 	SafeRelease(m_pEnvironmentCubeMap);
+	SafeRelease(m_pIrradianceMap);
+	SafeRelease(m_pIrradianceMapSRV);
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
@@ -203,12 +204,9 @@ void Renderer::Release()
 	SafeRelease(m_pDepthTexture);
 	SafeRelease(m_pBackBufferRTV);
 	SafeRelease(m_pSwapChain);
-	SafeRelease(m_pContext);
-	SafeRelease(m_pAnnotation);
 	SafeRelease(m_pConstantBuffer);
 
 	delete m_pEnvironmentSphere;
-	delete m_pShaderCompiler;
 	delete m_pToneMapping;
 	delete m_pCamera;
 
@@ -221,76 +219,9 @@ void Renderer::Release()
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 
-	if (m_isDebug) 
-	{
-		ID3D11Debug* pDebug = nullptr;
-		HRESULT hr = m_pDevice->QueryInterface(IID_PPV_ARGS(&pDebug));
-		if (SUCCEEDED(hr))
-		{
-			UINT references = m_pDevice->Release();
-			if (references > 1) 
-			{
-				pDebug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
-			}
-			SafeRelease(pDebug);
-		}
-	}
+	delete m_pContext;
 }
 
-
-HRESULT Renderer::CreateDevice(IDXGIFactory* pFactory)
-{
-	HRESULT hr = S_OK;
-
-	IDXGIAdapter* pAdapter = nullptr;
-	UINT adapterIdx = 0;
-
-	while (SUCCEEDED(pFactory->EnumAdapters(adapterIdx, &pAdapter)))
-	{
-		DXGI_ADAPTER_DESC adapterDesc = {};
-		pAdapter->GetDesc(&adapterDesc);
-
-		if (wcscmp(adapterDesc.Description, L"Microsoft Basic Render Driver") != 0)
-		{
-			break;
-		}
-
-		pAdapter->Release();
-		++adapterIdx;
-	}
-
-	if (pAdapter == nullptr)
-	{
-		hr = E_FAIL;
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		D3D_FEATURE_LEVEL levels[] = { D3D_FEATURE_LEVEL_11_0 };
-
-		hr = D3D11CreateDevice(
-			pAdapter,
-			D3D_DRIVER_TYPE_UNKNOWN,
-			nullptr,
-			D3D11_CREATE_DEVICE_DEBUG,
-			levels,
-			1,
-			D3D11_SDK_VERSION,
-			&m_pDevice,
-			nullptr,
-			&m_pContext
-		);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		hr = m_pContext->QueryInterface(IID_PPV_ARGS(&m_pAnnotation));
-	}
-
-	SafeRelease(pAdapter);
-
-	return hr;
-}
 
 HRESULT Renderer::CreateSwapChain(IDXGIFactory* pFactory, HWND hWnd)
 {
@@ -316,18 +247,19 @@ HRESULT Renderer::CreateSwapChain(IDXGIFactory* pFactory, HWND hWnd)
 	swapChainDesc.SampleDesc.Quality = 0;
 	swapChainDesc.Flags = 0;
 
-	return pFactory->CreateSwapChain(m_pDevice, &swapChainDesc, &m_pSwapChain);
+	return pFactory->CreateSwapChain(m_pContext->GetDevice(), &swapChainDesc, &m_pSwapChain);
 }
 
 HRESULT Renderer::CreateBackBuffer()
 {
+	ID3D11Device* pDevice = m_pContext->GetDevice();
 	ID3D11Texture2D* pBackBufferTexture = nullptr;
 
 	HRESULT hr = m_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBufferTexture));
 
 	if (SUCCEEDED(hr))
 	{
-		hr = m_pDevice->CreateRenderTargetView(pBackBufferTexture, nullptr, &m_pBackBufferRTV);
+		hr = pDevice->CreateRenderTargetView(pBackBufferTexture, nullptr, &m_pBackBufferRTV);
 	}
 
 	if (SUCCEEDED(hr))
@@ -345,7 +277,7 @@ HRESULT Renderer::CreateBackBuffer()
 		depthTextureDesc.SampleDesc.Count = 1;
 		depthTextureDesc.SampleDesc.Quality = 0;
 
-		hr = m_pDevice->CreateTexture2D(&depthTextureDesc, nullptr, &m_pDepthTexture);
+		hr = pDevice->CreateTexture2D(&depthTextureDesc, nullptr, &m_pDepthTexture);
 	}
 
 	if (SUCCEEDED(hr))
@@ -356,7 +288,7 @@ HRESULT Renderer::CreateBackBuffer()
 		dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 		dsvDesc.Flags = 0;
 
-		m_pDevice->CreateDepthStencilView(m_pDepthTexture, &dsvDesc, &m_pDepthTextureDSV);
+		pDevice->CreateDepthStencilView(m_pDepthTexture, &dsvDesc, &m_pDepthTextureDSV);
 	}
 
 	SafeRelease(pBackBufferTexture);
@@ -375,17 +307,17 @@ HRESULT Renderer::CreateBackBuffer()
 		hdrTextureDesc.SampleDesc.Count = 1;
 		hdrTextureDesc.SampleDesc.Quality = 0;
 
-		hr = m_pDevice->CreateTexture2D(&hdrTextureDesc, nullptr, &m_pHDRRenderTarget);
+		hr = pDevice->CreateTexture2D(&hdrTextureDesc, nullptr, &m_pHDRRenderTarget);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		hr = m_pDevice->CreateRenderTargetView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureRTV);
+		hr = pDevice->CreateRenderTargetView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureRTV);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		hr = m_pDevice->CreateShaderResourceView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureSRV);
+		hr = pDevice->CreateShaderResourceView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureSRV);
 	}
 
 	return hr;
@@ -393,6 +325,8 @@ HRESULT Renderer::CreateBackBuffer()
 
 HRESULT Renderer::CreatePipelineStateObjects()
 {
+	ID3D11Device* pDevice = m_pContext->GetDevice();
+
 	D3D11_RASTERIZER_DESC rasterizerDesc = {};
 	rasterizerDesc.FillMode = D3D11_FILL_SOLID;
 	rasterizerDesc.CullMode = D3D11_CULL_BACK;
@@ -405,7 +339,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	rasterizerDesc.MultisampleEnable = false;
 	rasterizerDesc.AntialiasedLineEnable = false;
 
-	HRESULT hr = m_pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerState);
+	HRESULT hr = pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerState);
 
 	if (SUCCEEDED(hr))
 	{
@@ -421,7 +355,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 		rasterizerDesc.MultisampleEnable = false;
 		rasterizerDesc.AntialiasedLineEnable = false;
 
-		hr = m_pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerStateFront);
+		hr = pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerStateFront);
 	}
 
 	if (SUCCEEDED(hr))
@@ -435,7 +369,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-		hr = m_pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
+		hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
 	}
 
 	if (SUCCEEDED(hr))
@@ -446,19 +380,14 @@ HRESULT Renderer::CreatePipelineStateObjects()
 		depthStencilStateDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 		depthStencilStateDesc.StencilEnable = false;
 
-		hr = m_pDevice->CreateDepthStencilState(&depthStencilStateDesc, &m_pDepthStencilState);
+		hr = pDevice->CreateDepthStencilState(&depthStencilStateDesc, &m_pDepthStencilState);
 	}
 
 	ID3DBlob* pVSBlob = nullptr;
 
 	if (SUCCEEDED(hr))
 	{
-		if (m_pShaderCompiler == nullptr)
-		{
-			m_pShaderCompiler = new ShaderCompiler(m_pDevice, m_isDebug);
-		}
-
-		if (!m_pShaderCompiler->CreateVertexAndPixelShaders(
+		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
 			"shaders/simpleShader.hlsl",
 			&m_pVertexShader,
 			&pVSBlob,
@@ -471,12 +400,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
-		if (m_pShaderCompiler == nullptr)
-		{
-			m_pShaderCompiler = new ShaderCompiler(m_pDevice, m_isDebug);
-		}
-
-		if (!m_pShaderCompiler->CreateVertexAndPixelShaders(
+		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
 			"shaders/environment.hlsl",
 			&m_pEnvironmentVShader,
 			&pVSBlob,
@@ -495,7 +419,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 			CreateInputElementDesc("NORMAL", DXGI_FORMAT_R32G32B32_FLOAT, sizeof(DirectX::XMFLOAT3) + sizeof(DirectX::XMFLOAT4))
 		};
 
-		hr = m_pDevice->CreateInputLayout(
+		hr = pDevice->CreateInputLayout(
 			inputLayoutDesc,
 			_countof(inputLayoutDesc),
 			pVSBlob->GetBufferPointer(),
@@ -556,12 +480,12 @@ HRESULT Renderer::CreateCubeResourses(Mesh*& cubeMesh)
 	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc(_countof(vertices) * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
 	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(&vertices);
 
-	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &mesh->pVertexBuffer);
+	HRESULT hr = m_pContext->GetDevice()->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &mesh->pVertexBuffer);
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(mesh->indexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(&indices);
-		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
+		hr = m_pContext->GetDevice()->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
 	}
 
 	if (SUCCEEDED(hr))
@@ -596,17 +520,17 @@ HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc(_countof(vertices) * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
 	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(&vertices);
 
-	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &mesh->pVertexBuffer);
+	HRESULT hr = m_pContext->GetDevice()->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &mesh->pVertexBuffer);
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(mesh->indexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
 		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(&indices);
-		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
+		hr = m_pContext->GetDevice()->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(15.0f, 1.0f, 15.0f);
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(30.0f, 1.0f, 30.0f);
 		planeMesh = mesh;
 	}
 	else
@@ -616,80 +540,6 @@ HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 	return hr;
 }
 
-
-HRESULT Renderer::CreateSphereResourses(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh)
-{
-	std::vector<Vertex> vertices;
-	std::vector<UINT16> indices;
-
-	for (UINT16 latNumber = 0; latNumber <= latitudeBands; ++latNumber)
-	{
-		float theta = latNumber * PI / latitudeBands;
-		float sinTheta = sin(theta);
-		float cosTheta = cos(theta);
-
-		for (UINT16 longNumber = 0; longNumber <= longitudeBands; ++longNumber)
-		{
-			float phi = longNumber * 2 * PI / longitudeBands;
-			float sinPhi = sin(phi);
-			float cosPhi = cos(phi);
-
-			float normalX = cosPhi * sinTheta;
-			float normalY = cosTheta;
-			float normalZ = sinPhi * sinTheta;
-
-			Vertex vs = { { normalX, normalY, normalZ },	
-						  { 0.5f, 0.1f, 0.1f, 1.0f },	
-				          { normalX, normalY, normalZ } };
-
-			vertices.push_back(vs);
-		}
-	}
-
-	for (UINT16 latNumber = 0; latNumber < latitudeBands; ++latNumber)
-	{
-		for (UINT16 longNumber = 0; longNumber < longitudeBands; ++longNumber)
-		{
-			UINT16 first = (latNumber * (longitudeBands + 1)) + longNumber;
-			UINT16 second = first + longitudeBands + 1;
-
-			indices.push_back(first);
-			indices.push_back(first + 1);
-			indices.push_back(second);
-
-			indices.push_back(second + 1);
-			indices.push_back(second);
-			indices.push_back(first + 1);
-		}
-	}
-
-	Mesh* mesh = new Mesh();
-	mesh->indexCount = (UINT)indices.size();
-
-	D3D11_BUFFER_DESC vertexBufferDesc = CreateDefaultBufferDesc((UINT)vertices.size() * sizeof(Vertex), D3D11_BIND_VERTEX_BUFFER);
-	D3D11_SUBRESOURCE_DATA vertexBufferData = CreateDefaultSubresourceData(vertices.data());
-
-	HRESULT hr = m_pDevice->CreateBuffer(&vertexBufferDesc, &vertexBufferData, &mesh->pVertexBuffer);
-	if (SUCCEEDED(hr))
-	{
-		D3D11_BUFFER_DESC indexBufferDesc = CreateDefaultBufferDesc(mesh->indexCount * sizeof(UINT16), D3D11_BIND_INDEX_BUFFER);
-		D3D11_SUBRESOURCE_DATA indexBufferData = CreateDefaultSubresourceData(indices.data());
-
-		hr = m_pDevice->CreateBuffer(&indexBufferDesc, &indexBufferData, &mesh->pIndexBuffer);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, 1.0f, 0.0f);
-		sphereMesh = mesh;
-	}
-	else
-	{
-		delete mesh;
-	}
-
-	return hr;
-}
 
 HRESULT Renderer::CreateSceneResources()
 {
@@ -706,20 +556,21 @@ HRESULT Renderer::CreateSceneResources()
 	if (SUCCEEDED(hr))
 	{
 		m_meshes.push_back(mesh);
-		hr = CreateSphereResourses(30, 30, mesh);
+		hr = m_pContext->CreateSphereMesh(30, 30, mesh);
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, 1.0f, 0.0f);
 	}
 
 	if (SUCCEEDED(hr))
 	{
 		m_meshes.push_back(mesh);
-		hr = CreateSphereResourses(30, 30, m_pEnvironmentSphere);
+		hr = m_pContext->CreateSphereMesh(30, 30, m_pEnvironmentSphere);
 	}
 
 	if (SUCCEEDED(hr))
 	{
 		D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-		hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pConstantBuffer);
+		hr = m_pContext->GetDevice()->CreateBuffer(&constantBufferDesc, nullptr, &m_pConstantBuffer);
 	}
 
 	if (SUCCEEDED(hr))
@@ -736,7 +587,7 @@ HRESULT Renderer::CreateSceneResources()
 		pbrBufferData.SysMemPitch = 0;
 		pbrBufferData.SysMemSlicePitch = 0;
 
-		hr = m_pDevice->CreateBuffer(&pbrBufferDesc, &pbrBufferData, &m_pPBRBuffer);
+		hr = m_pContext->GetDevice()->CreateBuffer(&pbrBufferDesc, &pbrBufferData, &m_pPBRBuffer);
 	}
 
 	if (SUCCEEDED(hr))
@@ -750,7 +601,7 @@ HRESULT Renderer::CreateSceneResources()
 		//m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
 
 		LightBuffer lightBuffer = {};
-		lightBuffer.lightsCount.x = (UINT)m_lights.size();
+		lightBuffer.lightsCount.x = 0;
 		memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
 
 		D3D11_SUBRESOURCE_DATA lightBufferData = {};
@@ -758,24 +609,35 @@ HRESULT Renderer::CreateSceneResources()
 		lightBufferData.SysMemPitch = 0;
 		lightBufferData.SysMemSlicePitch = 0;
 
-		hr = m_pDevice->CreateBuffer(&lightBufferDesc, &lightBufferData, &m_pLightBuffer);
+		hr = m_pContext->GetDevice()->CreateBuffer(&lightBufferDesc, &lightBufferData, &m_pLightBuffer);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		m_pToneMapping = ToneMapping::CreateToneMapping(m_pDevice, m_pContext, m_pShaderCompiler, App::MaxWindowSize);
+		m_pToneMapping = ToneMapping::CreateToneMapping(m_pContext, App::MaxWindowSize);
 
 		if (m_pToneMapping == nullptr)
 		{
 			hr = E_FAIL;
 		}
-
-		m_pToneMapping->UseAnnotations(m_pAnnotation);
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		hr = LoadTextureCube("data/maskonaive", &m_pEnvironmentCubeMap, &m_pEnvironmentCubeMapSRV);
+		hr = m_pContext->LoadTextureCubeFromHDRI(
+			"data/hdri/brown_photostudio_05_4k.hdr",
+			&m_pEnvironmentCubeMap,
+			&m_pEnvironmentCubeMapSRV
+		);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pContext->CalculateIrradianceMap(
+			m_pEnvironmentCubeMapSRV,
+			&m_pIrradianceMap,
+			&m_pIrradianceMapSRV
+		);
 	}
 
 	return hr;
@@ -788,94 +650,6 @@ HRESULT Renderer::SetResourceName(ID3D11Resource* pResource, const std::string& 
 		return E_FAIL;
 	}
 	return pResource->SetPrivateData(WKPDID_D3DDebugObjectName, (UINT)name.size(), name.c_str());
-}
-
-HRESULT Renderer::LoadTextureCube(
-	const std::string& pathToCubeSrc,
-	ID3D11Texture2D** ppTextureCube,
-	ID3D11ShaderResourceView** ppTextureCubeSRV
-) const
-{
-	std::string edges[6] = { "posx", "negx", "posy", "negy", "posz", "negz" };
-	HRESULT hr = S_OK;
-
-	ID3D11Texture2D* pSrcTexture = nullptr;
-
-	if (SUCCEEDED(hr))
-	{
-		std::string edgeName = pathToCubeSrc + "/" + edges[0] + ".jpg";
-		std::wstring wEdgeName(edgeName.begin(), edgeName.end());
-
-		hr = CreateWICTextureFromFile(m_pDevice, m_pContext, wEdgeName.c_str(), (ID3D11Resource**)&pSrcTexture, nullptr);
-	}
-
-	D3D11_TEXTURE2D_DESC cubeMapDesc = {};
-	if (SUCCEEDED(hr))
-	{
-		D3D11_TEXTURE2D_DESC srcTextureDesc = {};
-		pSrcTexture->GetDesc(&srcTextureDesc);
-
-		cubeMapDesc.Width = srcTextureDesc.Width;
-		cubeMapDesc.Height = srcTextureDesc.Height;
-		cubeMapDesc.Format = srcTextureDesc.Format;
-		cubeMapDesc.MipLevels = 1;
-		cubeMapDesc.ArraySize = 6;
-		cubeMapDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-		cubeMapDesc.Usage = D3D11_USAGE_DEFAULT;
-		cubeMapDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
-		cubeMapDesc.CPUAccessFlags = 0;
-		cubeMapDesc.SampleDesc.Count = 1;
-		cubeMapDesc.SampleDesc.Quality = 0;
-
-		hr = m_pDevice->CreateTexture2D(&cubeMapDesc, nullptr, ppTextureCube);
-	}
-
-	if (SUCCEEDED(hr) && ppTextureCubeSRV != nullptr)
-	{
-		hr = m_pDevice->CreateShaderResourceView(*ppTextureCube, nullptr, ppTextureCubeSRV);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		m_pContext->CopySubresourceRegion(*ppTextureCube, 0, 0, 0, 0, pSrcTexture, 0, nullptr);
-	}
-
-	SafeRelease(pSrcTexture);
-
-	for (UINT i = 1; i < _countof(edges) && SUCCEEDED(hr); ++i)
-	{
-		std::string edgeName = pathToCubeSrc + "/" + edges[i] + ".jpg";
-		std::wstring wEdgeName(edgeName.begin(), edgeName.end());
-
-		hr = CreateWICTextureFromFile(m_pDevice, m_pContext, wEdgeName.c_str(), (ID3D11Resource**)&pSrcTexture, nullptr);
-
-		if (FAILED(hr))
-		{
-			break;
-		}
-
-		if (m_isDebug)
-		{
-			D3D11_TEXTURE2D_DESC srcTextureDesc = {};
-			pSrcTexture->GetDesc(&srcTextureDesc);
-
-			if (srcTextureDesc.Width != cubeMapDesc.Width
-				|| srcTextureDesc.Height != cubeMapDesc.Height
-				|| srcTextureDesc.Format != cubeMapDesc.Format)
-			{
-				hr = E_FAIL;
-				break;
-			}
-		}
-
-		m_pContext->CopySubresourceRegion(*ppTextureCube, i, 0, 0, 0, pSrcTexture, 0, nullptr);
-
-		SafeRelease(pSrcTexture);
-	}
-
-	SafeRelease(pSrcTexture);
-
-	return hr;
 }
 
 
@@ -914,7 +688,7 @@ void Renderer::ChangeLightBrightness(UINT lightIdx, FLOAT newBrightness)
 	FillLightBuffer();
 }
 
-Camera* Renderer::getCamera()
+Camera* Renderer::GetCamera()
 {
 	return m_pCamera;
 }
@@ -923,10 +697,10 @@ Camera* Renderer::getCamera()
 void Renderer::FillLightBuffer()
 {
 	static LightBuffer lightBuffer = {};
-	lightBuffer.lightsCount.x = (UINT)m_lights.size();
+	lightBuffer.lightsCount.x = 0;
 	memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
 
-	m_pContext->UpdateSubresource(m_pLightBuffer, 0, nullptr, &lightBuffer, 0, 0);
+	m_pContext->GetContext()->UpdateSubresource(m_pLightBuffer, 0, nullptr, &lightBuffer, 0, 0);
 }
 
 
@@ -950,19 +724,20 @@ void Renderer::Update()
 
 void Renderer::RenderImGui()
 {
-	m_pAnnotation->BeginEvent(L"imGui");
+	m_pContext->BeginEvent(L"imGui");
+
 	static float bright = 10.0f;
 	static bool isNormal = false, isGeometry = false, isFresnel = false, isAll = true;
 	static float roughness = 0.1f, metalness = 0.1f, rgb[3] = { 1.0f, 0.71f, 0.29f };
-	static UINT pbrMode = 0u;
+	static int pbrMode = 0; // на самом деле UINT pbrMode
 
 	static auto updatePBRBuffer = [this]()->void
 	{
 		PBRBuffer pbrBuffer = {};
 		pbrBuffer.roughnessMetalness = { roughness, metalness , 0.0f, 0.0f };
 		pbrBuffer.albedo = { rgb[0], rgb[1], rgb[2], 1.0f };
-		pbrBuffer.pbrMode = { pbrMode, 0u, 0u, 0u };
-		m_pContext->UpdateSubresource(m_pPBRBuffer, 0, nullptr, &pbrBuffer, 0, 0);
+		pbrBuffer.pbrMode = { (UINT)pbrMode, 0u, 0u, 0u }; 
+		m_pContext->GetContext()->UpdateSubresource(m_pPBRBuffer, 0, nullptr, &pbrBuffer, 0, 0);
 	};
 
 	ImGui_ImplDX11_NewFrame();
@@ -976,42 +751,11 @@ void Renderer::RenderImGui()
 	ImGui::BeginChild("Display modes", ImVec2(0, 125), true);
 	ImGui::Text("Display modes:");
 
-	if (ImGui::Checkbox("Normal distribution function", &isNormal))
-	{
-		isNormal = true;
-		isGeometry = false; 
-		isFresnel = false; 
-		isAll = false;
+	ImGui::RadioButton("Normal distribution function", &pbrMode, 1);
+	ImGui::RadioButton("Geometry function", &pbrMode, 2);
+	ImGui::RadioButton("Fresnel function", &pbrMode, 3);
+	ImGui::RadioButton("All", &pbrMode, 0);
 
-		pbrMode = 1;
-	}
-	if (ImGui::Checkbox("Geometry function", &isGeometry))
-	{
-		isNormal = false;
-		isGeometry = true;
-		isFresnel = false;
-		isAll = false;
-
-		pbrMode = 2;
-	}
-	if (ImGui::Checkbox("Fresnel function", &isFresnel))
-	{
-		isNormal = false;
-		isGeometry = false;
-		isFresnel = true;
-		isAll = false;
-
-		pbrMode = 3;
-	}
-	if (ImGui::Checkbox("All", &isAll))
-	{
-		isNormal = false;
-		isGeometry = false;
-		isFresnel = false;
-		isAll = true;
-
-		pbrMode = 0;
-	}
 	ImGui::EndChild();
 
 	ImGui::BeginChild("PBR setting", ImVec2(0, 100), true);
@@ -1029,28 +773,30 @@ void Renderer::RenderImGui()
 
 	updatePBRBuffer();
 
-	m_pAnnotation->EndEvent();
+	m_pContext->EndEvent();
 }
 
 void Renderer::Render()
 {
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
 	Update();
 
-	m_pAnnotation->BeginEvent(L"Draw Scene");
+	m_pContext->BeginEvent(L"Draw Scene");
 
 	FLOAT width = s_near / tanf(s_fov / 2.0f);
 	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
 	m_projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
 
-	m_pContext->ClearState();
+	pContext->ClearState();
 
-	//m_pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
-	m_pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
+	pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
+	//pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
 
 	static constexpr float fillColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
-	m_pContext->ClearRenderTargetView(m_pBackBufferRTV, fillColor);
-	m_pContext->ClearRenderTargetView(m_pHDRTextureRTV, fillColor);
-	m_pContext->ClearDepthStencilView(m_pDepthTextureDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
+	pContext->ClearRenderTargetView(m_pBackBufferRTV, fillColor);
+	pContext->ClearRenderTargetView(m_pHDRTextureRTV, fillColor);
+	pContext->ClearDepthStencilView(m_pDepthTextureDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftY = 0;
@@ -1066,19 +812,19 @@ void Renderer::Render()
 	rect.right = m_windowWidth;
 	rect.bottom = m_windowHeight;
 
-	m_pContext->RSSetViewports(1, &viewport);
-	m_pContext->RSSetScissorRects(1, &rect);
+	pContext->RSSetViewports(1, &viewport);
+	pContext->RSSetScissorRects(1, &rect);
 
-	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	m_pContext->IASetInputLayout(m_pInputLayout);
-	m_pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
+	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	pContext->IASetInputLayout(m_pInputLayout);
+	pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
 
 	RenderEnvironment();
 	RenderScene();
 
-	m_pAnnotation->EndEvent();
+	m_pContext->EndEvent();
 
-	//PostProcessing();
+	PostProcessing();
 
 	RenderImGui();
 
@@ -1087,13 +833,18 @@ void Renderer::Render()
 
 void Renderer::RenderScene()
 {
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	m_pContext->RSSetState(m_pRasterizerState);
+	pContext->RSSetState(m_pRasterizerState);
 
-	m_pContext->VSSetShader(m_pVertexShader, nullptr, 0);
-	m_pContext->PSSetShader(m_pPixelShader, nullptr, 0);
+	pContext->VSSetShader(m_pVertexShader, nullptr, 0);
+	pContext->PSSetShader(m_pPixelShader, nullptr, 0);
+
+	pContext->PSSetShaderResources(0, 1, &m_pIrradianceMapSRV);
+	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
@@ -1101,63 +852,65 @@ void Renderer::RenderScene()
 	{
 		ID3D11Buffer* vertexBuffers[] = { mesh->pVertexBuffer };
 
-		m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-		m_pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+		pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+		pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
 		ConstantBuffer constantBuffer = {};
 
 		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
 		DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
 		constantBuffer.cameraPosition = m_pCamera->GetPosition();
-		m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+		pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
-		m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-		m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-		m_pContext->DrawIndexed(mesh->indexCount, 0, 0);
+		pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+		pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+		pContext->DrawIndexed(mesh->indexCount, 0, 0);
 	}
 }
 
 void Renderer::PostProcessing()
 {
-	m_pAnnotation->BeginEvent(L"Post Processing");
+	m_pContext->BeginEvent(L"Post Processing");
 
 	m_pToneMapping->ToneMap(m_pHDRTextureSRV, m_pBackBufferRTV, m_windowWidth, m_windowHeight, m_timeFromLastFrame / 10e6f);
 
-	m_pAnnotation->EndEvent();
+	m_pContext->EndEvent();
 }
 
 void Renderer::RenderEnvironment()
 {
-	m_pAnnotation->BeginEvent(L"Environment");
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
+	m_pContext->BeginEvent(L"Environment");
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer };
 
-	m_pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
-	m_pContext->RSSetState(m_pRasterizerStateFront);
-	m_pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+	pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
+	pContext->RSSetState(m_pRasterizerStateFront);
+	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
 
-	m_pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
-	m_pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);
+	pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
+	pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);
 
 	ID3D11Buffer* vertexBuffers[] = { m_pEnvironmentSphere->pVertexBuffer };
 
-	m_pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-	m_pContext->IASetIndexBuffer(m_pEnvironmentSphere->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+	pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+	pContext->IASetIndexBuffer(m_pEnvironmentSphere->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
 	ConstantBuffer constantBuffer = {};
 
 	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(m_pEnvironmentSphere->modelMatrix));
 	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
 	constantBuffer.cameraPosition = m_pCamera->GetPosition();
-	m_pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+	pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
-	m_pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-	m_pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-	m_pContext->DrawIndexed(m_pEnvironmentSphere->indexCount, 0, 0);
+	pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	pContext->DrawIndexed(m_pEnvironmentSphere->indexCount, 0, 0);
 
-	m_pAnnotation->EndEvent();
+	m_pContext->EndEvent();
 }
 

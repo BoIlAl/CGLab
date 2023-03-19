@@ -6,6 +6,7 @@
 
 #include "common.h"
 #include "shaderCompiler.h"
+#include "rendererContext.h"
 
 
 struct ExposureBuffer
@@ -13,12 +14,11 @@ struct ExposureBuffer
 	DirectX::XMFLOAT4 exposure;
 };
 
-ToneMapping* ToneMapping::CreateToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, 
-											ShaderCompiler* pShaderCompiler, UINT maxWindowSize)
+ToneMapping* ToneMapping::CreateToneMapping(RendererContext* pContext, UINT maxWindowSize)
 {
-	ToneMapping* pToneMapping = new ToneMapping(pDevice, pContext, maxWindowSize);
+	ToneMapping* pToneMapping = new ToneMapping(pContext, maxWindowSize);
 
-	HRESULT hr = pToneMapping->CreatePipelineStateObjects(pShaderCompiler);
+	HRESULT hr = pToneMapping->CreatePipelineStateObjects();
 
 	if (SUCCEEDED(hr))
 	{
@@ -36,9 +36,8 @@ ToneMapping* ToneMapping::CreateToneMapping(ID3D11Device* pDevice, ID3D11DeviceC
 }
 
 
-ToneMapping::ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, UINT maxWindowSize)
-	: m_pDevice(pDevice)
-	, m_pContext(pContext)
+ToneMapping::ToneMapping(RendererContext* pContext, UINT maxWindowSize)
+	: m_pContext(pContext)
 	, m_pRasterizerState(nullptr)
 	, m_pMinMagLinearSampler(nullptr)
 	, m_pToneMappingVS(nullptr)
@@ -53,7 +52,6 @@ ToneMapping::ToneMapping(ID3D11Device* pDevice, ID3D11DeviceContext* pContext, U
 	, m_pAverageBrightnessPS(nullptr)
 	, m_pDownSampleVS(nullptr)
 	, m_pDownSamplePS(nullptr)
-	, m_pAnnotation(nullptr)
 	, m_pExposureBuffer(nullptr)
 {}
 
@@ -83,7 +81,7 @@ ToneMapping::~ToneMapping()
 }
 
 
-HRESULT ToneMapping::CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler)
+HRESULT ToneMapping::CreatePipelineStateObjects()
 {
 	D3D11_RASTERIZER_DESC rasterizerDesc = {};
 	rasterizerDesc.FillMode = D3D11_FILL_SOLID;
@@ -97,13 +95,13 @@ HRESULT ToneMapping::CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler)
 	rasterizerDesc.MultisampleEnable = false;
 	rasterizerDesc.AntialiasedLineEnable = false;
 
-	HRESULT hr = m_pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerState);
+	HRESULT hr = m_pContext->GetDevice()->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerState);
 
 	if (SUCCEEDED(hr))
 	{
 		ID3DBlob* pVSBlob = nullptr;
 
-		if (!pShaderCompiler->CreateVertexAndPixelShaders(
+		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
 			"shaders/toneMapping.hlsl",
 			&m_pToneMappingVS,
 			&pVSBlob,
@@ -127,14 +125,14 @@ HRESULT ToneMapping::CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler)
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-		hr = m_pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
+		hr = m_pContext->GetDevice()->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
 	}
 
 	if (SUCCEEDED(hr))
 	{
 		ID3DBlob* pVSBlob = nullptr;
 
-		if (!pShaderCompiler->CreateVertexAndPixelShaders(
+		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
 			"shaders/averageBrightness.hlsl",
 			&m_pAverageBrightnessVS,
 			&pVSBlob,
@@ -151,7 +149,7 @@ HRESULT ToneMapping::CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler)
 	{
 		ID3DBlob* pVSBlob = nullptr;
 
-		if (!pShaderCompiler->CreateVertexAndPixelShaders(
+		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
 			"shaders/downSample.hlsl",
 			&m_pDownSampleVS,
 			&pVSBlob,
@@ -169,17 +167,13 @@ HRESULT ToneMapping::CreatePipelineStateObjects(ShaderCompiler* pShaderCompiler)
 }
 
 
-void ToneMapping::UseAnnotations(ID3DUserDefinedAnnotation* pAnnotation)
-{
-	m_pAnnotation = pAnnotation;
-}
-
-
 HRESULT ToneMapping::CreateResources()
 {
+	ID3D11Device* pDevice = m_pContext->GetDevice();
+
 	D3D11_BUFFER_DESC constantBufferDesc = CreateDefaultBufferDesc(sizeof(ExposureBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-	HRESULT hr = m_pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pExposureBuffer);
+	HRESULT hr = pDevice->CreateBuffer(&constantBufferDesc, nullptr, &m_pExposureBuffer);
 
 	if (SUCCEEDED(hr))
 	{
@@ -195,7 +189,7 @@ HRESULT ToneMapping::CreateResources()
 		exposureDesc.SampleDesc.Count = 1;
 		exposureDesc.SampleDesc.Quality = 0;
 
-		hr = m_pDevice->CreateTexture2D(&exposureDesc, nullptr, &m_pExposureTexture);
+		hr = pDevice->CreateTexture2D(&exposureDesc, nullptr, &m_pExposureTexture);
 	}
 
 	if (SUCCEEDED(hr))
@@ -212,7 +206,7 @@ HRESULT ToneMapping::CreateResources()
 		exposureDstDesc.SampleDesc.Count = 1;
 		exposureDstDesc.SampleDesc.Quality = 0;
 
-		hr = m_pDevice->CreateTexture2D(&exposureDstDesc, nullptr, &m_pExposureDstTexture);
+		hr = pDevice->CreateTexture2D(&exposureDstDesc, nullptr, &m_pExposureDstTexture);
 	}
 
 	if (SUCCEEDED(hr))
@@ -228,7 +222,7 @@ HRESULT ToneMapping::CreateResources()
 			srvDesc.Texture2D.MostDetailedMip = i;
 
 			ID3D11ShaderResourceView* pSrv = nullptr;
-			hr = m_pDevice->CreateShaderResourceView(m_pExposureTexture, &srvDesc, &pSrv);
+			hr = pDevice->CreateShaderResourceView(m_pExposureTexture, &srvDesc, &pSrv);
 
 			if (FAILED(hr))
 			{
@@ -251,7 +245,7 @@ HRESULT ToneMapping::CreateResources()
 			rtvDesc.Texture2D.MipSlice = i;
 
 			ID3D11RenderTargetView* pRtv = nullptr;
-			hr = m_pDevice->CreateRenderTargetView(m_pExposureTexture, &rtvDesc, &pRtv);
+			hr = pDevice->CreateRenderTargetView(m_pExposureTexture, &rtvDesc, &pRtv);
 
 			if (FAILED(hr))
 			{
@@ -283,24 +277,6 @@ UINT ToneMapping::DefaineMostDetailedMip(UINT width, UINT height) const
 }
 
 
-void ToneMapping::BeginEvent(LPCWSTR name) const
-{
-	if (m_pAnnotation != nullptr)
-	{
-		m_pAnnotation->BeginEvent(name);
-	}
-}
-
-
-void ToneMapping::EndEvent() const
-{
-	if (m_pAnnotation != nullptr)
-	{
-		m_pAnnotation->EndEvent();
-	}
-}
-
-
 void ToneMapping::Update(FLOAT averageBrightness, FLOAT deltaTime)
 {
 	m_adaptedBrightness = EyeAdaptation(averageBrightness, deltaTime);
@@ -308,7 +284,7 @@ void ToneMapping::Update(FLOAT averageBrightness, FLOAT deltaTime)
 	static ExposureBuffer exposureBuffer = {};
 	exposureBuffer.exposure = { (1.03f - (2.0f / (2 + log10f(m_adaptedBrightness + 1)))) / averageBrightness, 0.0f, 0.0f, 0.0f };
 
-	m_pContext->UpdateSubresource(m_pExposureBuffer, 0, nullptr, &exposureBuffer, 0, 0);
+	m_pContext->GetContext()->UpdateSubresource(m_pExposureBuffer, 0, nullptr, &exposureBuffer, 0, 0);
 }
 
 float ToneMapping::CalculateAverageBrightness(
@@ -317,13 +293,15 @@ float ToneMapping::CalculateAverageBrightness(
 	UINT renderTargetHeight
 	)
 {
-	BeginEvent(L"Average Brightness");
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
+	m_pContext->BeginEvent(L"Average Brightness");
 
 	UINT textureSize = MinPower2(renderTargetWidth, renderTargetHeight);
 
-	m_pContext->ClearState();
+	pContext->ClearState();
 
-	m_pContext->OMSetRenderTargets(1, &m_exposureTextureRTVs[m_mostDetailedMip], nullptr);
+	pContext->OMSetRenderTargets(1, &m_exposureTextureRTVs[m_mostDetailedMip], nullptr);
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftY = 0;
@@ -339,23 +317,23 @@ float ToneMapping::CalculateAverageBrightness(
 	rect.right = textureSize;
 	rect.bottom = textureSize;
 
-	m_pContext->RSSetViewports(1, &viewport);
-	m_pContext->RSSetScissorRects(1, &rect);
-	m_pContext->RSSetState(m_pRasterizerState);
+	pContext->RSSetViewports(1, &viewport);
+	pContext->RSSetScissorRects(1, &rect);
+	pContext->RSSetState(m_pRasterizerState);
 
-	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-	m_pContext->IASetInputLayout(nullptr);
+	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	pContext->IASetInputLayout(nullptr);
 
-	m_pContext->VSSetShader(m_pAverageBrightnessVS, nullptr, 0);
-	m_pContext->PSSetShader(m_pAverageBrightnessPS, nullptr, 0);
+	pContext->VSSetShader(m_pAverageBrightnessVS, nullptr, 0);
+	pContext->PSSetShader(m_pAverageBrightnessPS, nullptr, 0);
 
-	m_pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
-	m_pContext->PSSetShaderResources(0, 1, &pSrcTextureSRV);
+	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+	pContext->PSSetShaderResources(0, 1, &pSrcTextureSRV);
 
-	m_pContext->Draw(4, 0);
+	pContext->Draw(4, 0);
 
-	m_pContext->VSSetShader(m_pDownSampleVS, nullptr, 0);
-	m_pContext->PSSetShader(m_pDownSamplePS, nullptr, 0);
+	pContext->VSSetShader(m_pDownSampleVS, nullptr, 0);
+	pContext->PSSetShader(m_pDownSamplePS, nullptr, 0);
 
 	UINT i = m_mostDetailedMip;
 
@@ -367,25 +345,25 @@ float ToneMapping::CalculateAverageBrightness(
 		rect.right = n;
 		rect.bottom = n;
 
-		m_pContext->OMSetRenderTargets(1, &m_exposureTextureRTVs[(size_t)i + 1], nullptr);
+		pContext->OMSetRenderTargets(1, &m_exposureTextureRTVs[(size_t)i + 1], nullptr);
 
-		m_pContext->RSSetViewports(1, &viewport);
-		m_pContext->RSSetScissorRects(1, &rect);
+		pContext->RSSetViewports(1, &viewport);
+		pContext->RSSetScissorRects(1, &rect);
 
-		m_pContext->PSSetShaderResources(0, 1, &m_exposureTextureSRVs[i]);
+		pContext->PSSetShaderResources(0, 1, &m_exposureTextureSRVs[i]);
 
-		m_pContext->Draw(4, 0);
+		pContext->Draw(4, 0);
 	}
 
-	m_pContext->CopySubresourceRegion(m_pExposureDstTexture, 0, 0, 0, 0, m_pExposureTexture, i, nullptr);
+	pContext->CopySubresourceRegion(m_pExposureDstTexture, 0, 0, 0, 0, m_pExposureTexture, i, nullptr);
 
 	D3D11_MAPPED_SUBRESOURCE resourceDesc = {};
-	auto hr = m_pContext->Map(m_pExposureDstTexture, 0, D3D11_MAP_READ, 0, &resourceDesc);
+	auto hr = pContext->Map(m_pExposureDstTexture, 0, D3D11_MAP_READ, 0, &resourceDesc);
 	FLOAT averageBrightness = *reinterpret_cast<FLOAT*>(resourceDesc.pData);
 
-	m_pContext->Unmap(m_pExposureDstTexture, 0);
+	pContext->Unmap(m_pExposureDstTexture, 0);
 
-	EndEvent();
+	m_pContext->EndEvent();
 
 	return expf(averageBrightness) - 1.0f;
 }
@@ -399,15 +377,17 @@ HRESULT ToneMapping::ToneMap(
 	FLOAT deltaTime
 )
 {
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
 	m_mostDetailedMip = DefaineMostDetailedMip(renderTargetWidth, renderTargetHeight);
 
 	Update(CalculateAverageBrightness(pSrcTextureSRV, renderTargetWidth, renderTargetHeight), deltaTime);
 
-	BeginEvent(L"Tone Mapping");
+	m_pContext->BeginEvent(L"Tone Mapping");
 
-	m_pContext->ClearState();
+	pContext->ClearState();
 
-	m_pContext->OMSetRenderTargets(1, &pDstTextureRTV, nullptr);
+	pContext->OMSetRenderTargets(1, &pDstTextureRTV, nullptr);
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftY = 0;
@@ -423,23 +403,23 @@ HRESULT ToneMapping::ToneMap(
 	rect.right = renderTargetWidth;
 	rect.bottom = renderTargetHeight;
 
-	m_pContext->RSSetViewports(1, &viewport);
-	m_pContext->RSSetScissorRects(1, &rect);
-	m_pContext->RSSetState(m_pRasterizerState);
+	pContext->RSSetViewports(1, &viewport);
+	pContext->RSSetScissorRects(1, &rect);
+	pContext->RSSetState(m_pRasterizerState);
 
-	m_pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-	m_pContext->IASetInputLayout(nullptr);
+	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	pContext->IASetInputLayout(nullptr);
 
-	m_pContext->VSSetShader(m_pToneMappingVS, nullptr, 0);
-	m_pContext->PSSetShader(m_pToneMappingPS, nullptr, 0);
+	pContext->VSSetShader(m_pToneMappingVS, nullptr, 0);
+	pContext->PSSetShader(m_pToneMappingPS, nullptr, 0);
 
-	m_pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
-	m_pContext->PSSetShaderResources(0, 1, &pSrcTextureSRV);
-	m_pContext->PSSetConstantBuffers(0, 1, &m_pExposureBuffer);
+	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+	pContext->PSSetShaderResources(0, 1, &pSrcTextureSRV);
+	pContext->PSSetConstantBuffers(0, 1, &m_pExposureBuffer);
 
-	m_pContext->Draw(4, 0);
+	pContext->Draw(4, 0);
 
-	EndEvent();
+	m_pContext->EndEvent();
 
 	return S_OK;
 }
