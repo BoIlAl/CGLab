@@ -97,11 +97,11 @@ float GeometryFunction(float3 normal, float3 dirToView, float3 dirToLight, float
 float3 FresnelSchlickRoughnessFunction(float3 dirToView, float3 normal, float3 metalF0, float metalness, float roughness)
 {
     metalness = saturate(metalness);
-    float invRoughness = (1 - roughness);
+    float invRoughness = max(1 - roughness, 0.001f);
     
     float3 F0 = max((0.04f, 0.04f, 0.04f) * (1 - metalness) + metalF0 * metalness, float3(0.0f, 0.0f, 0.0f));
     
-    return F0 + max(float3(invRoughness, invRoughness, invRoughness), F0) * pow(1 - dot(dirToView, normal), 5.0f);
+    return F0 + (max(float3(invRoughness, invRoughness, invRoughness), F0) - F0) * pow(1 - dot(dirToView, normal), 5.0f);
 }
 
 float3 FresnelFunction(float3 dirToView, float3 halfVector, float3 metalF0, float metalness)

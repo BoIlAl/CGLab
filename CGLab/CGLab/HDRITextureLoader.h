@@ -6,26 +6,32 @@
 class HDRITextureLoader
 {
 public:
-	static HDRITextureLoader* CreateHDRITextureLoader(RendererContext* pContext);
+	static HDRITextureLoader* CreateHDRITextureLoader(
+		RendererContext* pContext,
+		UINT cubeTextureSize,
+		UINT irradianceMapSize
+	);
 
 	~HDRITextureLoader();
 
 	HRESULT LoadTextureCubeFromHDRI(
 		const std::string& fileName,
 		ID3D11Texture2D** ppTextureCube,
-		UINT cubeTextureSize,
 		ID3D11ShaderResourceView** ppTextureCubeSRV
 	);
 
 	HRESULT CalculateIrradianceMap(
 		ID3D11ShaderResourceView* pTextureCubeSRV,
 		ID3D11Texture2D** ppIrradianceMap,
-		UINT cubeTextureSize,
 		ID3D11ShaderResourceView** ppIrradianceMapSRV
 	);
 
 private:
-	HDRITextureLoader(RendererContext* pContext);
+	HDRITextureLoader(
+		RendererContext* pContext,
+		UINT cubeTextureSize,
+		UINT irradianceMapSize
+	);
 
 	bool Init();
 
@@ -57,6 +63,9 @@ private:
 	ID3D11RenderTargetView* m_pTmpCubeEdge32RTV;
 
 	ID3D11Buffer* m_pConstantBuffer;
+
+	UINT m_cubeTextureSize;
+	UINT m_irradianceMapSize;
 
 	DirectX::XMMATRIX m_edgesModelMatrices[6];
 	DirectX::XMMATRIX m_edgesViewMatrices[6];

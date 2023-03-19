@@ -129,7 +129,7 @@ bool RendererContext::Init(IDXGIFactory* pFactory)
 
 	if (SUCCEEDED(hr))
 	{
-		m_pHDRITextureLoader = HDRITextureLoader::CreateHDRITextureLoader(this);
+		m_pHDRITextureLoader = HDRITextureLoader::CreateHDRITextureLoader(this, 512u, 32u);
 
 		if (m_pHDRITextureLoader == nullptr)
 		{
@@ -249,21 +249,19 @@ HRESULT RendererContext::LoadTextureCube(
 HRESULT RendererContext::LoadTextureCubeFromHDRI(
 	const std::string& fileName,
 	ID3D11Texture2D** ppTextureCube,
-	UINT cubeTextureSize,
 	ID3D11ShaderResourceView** ppTextureCubeSRV
 ) const
 {
-	return m_pHDRITextureLoader->LoadTextureCubeFromHDRI(fileName, ppTextureCube, cubeTextureSize, ppTextureCubeSRV);
+	return m_pHDRITextureLoader->LoadTextureCubeFromHDRI(fileName, ppTextureCube, ppTextureCubeSRV);
 }
 
 HRESULT RendererContext::CalculateIrradianceMap(
 	ID3D11ShaderResourceView* pTextureCubeSRV,
 	ID3D11Texture2D** ppIrradianceMap,
-	UINT cubeTextureSize,
 	ID3D11ShaderResourceView** ppIrradianceMapSRV
 ) const
 {
-	return m_pHDRITextureLoader->CalculateIrradianceMap(pTextureCubeSRV, ppIrradianceMap, cubeTextureSize, ppIrradianceMapSRV);
+	return m_pHDRITextureLoader->CalculateIrradianceMap(pTextureCubeSRV, ppIrradianceMap, ppIrradianceMapSRV);
 }
 
 

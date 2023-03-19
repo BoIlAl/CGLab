@@ -12,9 +12,13 @@ struct ConstantBuffer
 };
 
 
-HDRITextureLoader* HDRITextureLoader::CreateHDRITextureLoader(RendererContext* pContext)
+HDRITextureLoader* HDRITextureLoader::CreateHDRITextureLoader(
+	RendererContext* pContext,
+	UINT cubeTextureSize,
+	UINT irradianceMapSize
+)
 {
-	HDRITextureLoader* pLoader = new HDRITextureLoader(pContext);
+	HDRITextureLoader* pLoader = new HDRITextureLoader(pContext, cubeTextureSize, irradianceMapSize);
 
 	if (pLoader->Init())
 	{
@@ -26,7 +30,11 @@ HDRITextureLoader* HDRITextureLoader::CreateHDRITextureLoader(RendererContext* p
 }
 
 
-HDRITextureLoader::HDRITextureLoader(RendererContext* pContext)
+HDRITextureLoader::HDRITextureLoader(
+	RendererContext* pContext,
+	UINT cubeTextureSize,
+	UINT irradianceMapSize
+)
 	: m_pContext(pContext)
 	, m_pRasterizerState(nullptr)
 	, m_pInputLayout(nullptr)
@@ -40,6 +48,8 @@ HDRITextureLoader::HDRITextureLoader(RendererContext* pContext)
 	, m_pTmpCubeEdge32(nullptr)
 	, m_pTmpCubeEdge32RTV(nullptr)
 	, m_pConstantBuffer(nullptr)
+	, m_cubeTextureSize(cubeTextureSize)
+	, m_irradianceMapSize(irradianceMapSize)
 {
 	m_edgesModelMatrices[0] = DirectX::XMMatrixRotationY(PI / 2.0f);	// +X
 	m_edgesModelMatrices[1] = DirectX::XMMatrixRotationY(-PI / 2.0f);	// -X
@@ -195,7 +205,7 @@ HRESULT HDRITextureLoader::CreateResources()
 	{
 		D3D11_TEXTURE2D_DESC cubeEdgeCopyDstDesc = CreateDefaultTexture2DDesc(
 			DXGI_FORMAT_R32G32B32A32_FLOAT,
-			512, 512,
+			m_cubeTextureSize, m_cubeTextureSize,
 			D3D11_BIND_RENDER_TARGET
 		);
 
@@ -211,7 +221,7 @@ HRESULT HDRITextureLoader::CreateResources()
 	{
 		D3D11_TEXTURE2D_DESC cubeEdgeCopyDstDesc = CreateDefaultTexture2DDesc(
 			DXGI_FORMAT_R32G32B32A32_FLOAT,
-			32, 32,
+			m_irradianceMapSize, m_irradianceMapSize,
 			D3D11_BIND_RENDER_TARGET
 		);
 
@@ -230,7 +240,6 @@ HRESULT HDRITextureLoader::CreateResources()
 HRESULT HDRITextureLoader::LoadTextureCubeFromHDRI(
 	const std::string& fileName,
 	ID3D11Texture2D** ppTextureCube,
-	UINT cubeTextureSize,
 	ID3D11ShaderResourceView** ppTextureCubeSRV
 )
 {
@@ -272,7 +281,7 @@ HRESULT HDRITextureLoader::LoadTextureCubeFromHDRI(
 	{
 		D3D11_TEXTURE2D_DESC cubeTextureDesc = CreateDefaultTexture2DDesc(
 			DXGI_FORMAT_R32G32B32A32_FLOAT,
-			cubeTextureSize, cubeTextureSize,
+			m_cubeTextureSize, m_cubeTextureSize,
 			D3D11_BIND_SHADER_RESOURCE
 		);
 		cubeTextureDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
@@ -283,7 +292,7 @@ HRESULT HDRITextureLoader::LoadTextureCubeFromHDRI(
 
 	if (SUCCEEDED(hr))
 	{
-		Render(pHDRTextureSrcSRV, *ppTextureCube, cubeTextureSize);
+		Render(pHDRTextureSrcSRV, *ppTextureCube, m_cubeTextureSize);
 
 		if (ppTextureCubeSRV != nullptr)
 		{
@@ -301,7 +310,6 @@ HRESULT HDRITextureLoader::LoadTextureCubeFromHDRI(
 HRESULT HDRITextureLoader::CalculateIrradianceMap(
 	ID3D11ShaderResourceView* pTextureCubeSRV,
 	ID3D11Texture2D** ppIrradianceMap,
-	UINT cubeTextureSize,
 	ID3D11ShaderResourceView** ppIrradianceMapSRV
 )
 {
@@ -309,7 +317,7 @@ HRESULT HDRITextureLoader::CalculateIrradianceMap(
 
 	D3D11_TEXTURE2D_DESC cubeTextureDesc = CreateDefaultTexture2DDesc(
 		DXGI_FORMAT_R32G32B32A32_FLOAT,
-		cubeTextureSize, cubeTextureSize,
+		m_irradianceMapSize, m_irradianceMapSize,
 		D3D11_BIND_SHADER_RESOURCE
 	);
 	cubeTextureDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
@@ -319,7 +327,7 @@ HRESULT HDRITextureLoader::CalculateIrradianceMap(
 
 	if (SUCCEEDED(hr))
 	{
-		RenderIrradiance(pTextureCubeSRV, *ppIrradianceMap, cubeTextureSize);
+		RenderIrradiance(pTextureCubeSRV, *ppIrradianceMap, m_irradianceMapSize);
 
 		if (ppIrradianceMapSRV != nullptr)
 		{

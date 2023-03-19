@@ -601,7 +601,7 @@ HRESULT Renderer::CreateSceneResources()
 		//m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
 
 		LightBuffer lightBuffer = {};
-		lightBuffer.lightsCount.x = (UINT)m_lights.size();
+		lightBuffer.lightsCount.x = 0;
 		memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
 
 		D3D11_SUBRESOURCE_DATA lightBufferData = {};
@@ -625,9 +625,8 @@ HRESULT Renderer::CreateSceneResources()
 	if (SUCCEEDED(hr))
 	{
 		hr = m_pContext->LoadTextureCubeFromHDRI(
-			"data/hdri/je_gray_02_4k.hdr",
+			"data/hdri/brown_photostudio_05_4k.hdr",
 			&m_pEnvironmentCubeMap,
-			512u,
 			&m_pEnvironmentCubeMapSRV
 		);
 	}
@@ -637,7 +636,6 @@ HRESULT Renderer::CreateSceneResources()
 		hr = m_pContext->CalculateIrradianceMap(
 			m_pEnvironmentCubeMapSRV,
 			&m_pIrradianceMap,
-			32u,
 			&m_pIrradianceMapSRV
 		);
 	}
@@ -699,7 +697,7 @@ Camera* Renderer::GetCamera()
 void Renderer::FillLightBuffer()
 {
 	static LightBuffer lightBuffer = {};
-	lightBuffer.lightsCount.x = 1;
+	lightBuffer.lightsCount.x = 0;
 	memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
 
 	m_pContext->GetContext()->UpdateSubresource(m_pLightBuffer, 0, nullptr, &lightBuffer, 0, 0);
