@@ -90,6 +90,12 @@
     <ClInclude Include="HDRITextureLoader.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="preintegratedBRDF.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="prefilteredColor.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CGLab.cpp">
@@ -140,6 +146,12 @@
     <ClCompile Include="HDRITextureLoader.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="preintegratedBRDF.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="prefilteredColor.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="CGLab.rc">
@@ -174,6 +186,12 @@
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\irradianceMap.hlsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\preintegratedBRDF.hlsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\prefilteredColor.hlsl">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

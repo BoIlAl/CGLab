@@ -7,6 +7,9 @@
 #include "WICTextureLoader.h"
 #include "HDRITextureLoader.h"
 
+#include "preintegratedBRDF.h"
+#include "prefilteredColor.h"
+
 
 RendererContext* RendererContext::CreateContext(IDXGIFactory* pFactory)
 {
@@ -28,6 +31,8 @@ RendererContext::RendererContext()
 	, m_pAnnotation(nullptr)
 	, m_pShaderCompiler(nullptr)
 	, m_pHDRITextureLoader(nullptr)
+	, m_pPreintegratedBRDF(nullptr)
+	, m_pPrefilteredColor(nullptr)
 #if _DEBUG
 	, m_isDebug(true)
 #else
@@ -39,6 +44,8 @@ RendererContext::~RendererContext()
 {
 	delete m_pHDRITextureLoader;
 	delete m_pShaderCompiler;
+	delete m_pPreintegratedBRDF;
+	delete m_pPrefilteredColor;
 
 	SafeRelease(m_pAnnotation);
 	SafeRelease(m_pContext);
@@ -132,6 +139,24 @@ bool RendererContext::Init(IDXGIFactory* pFactory)
 		m_pHDRITextureLoader = HDRITextureLoader::CreateHDRITextureLoader(this, 512u, 32u);
 
 		if (m_pHDRITextureLoader == nullptr)
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pPreintegratedBRDF = PreintegratedBRDF::Create(this);
+		if (!m_pPreintegratedBRDF)
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pPrefilteredColor = PrefilteredColor::Create(this);
+		if (!m_pPrefilteredColor)
 		{
 			hr = E_FAIL;
 		}
@@ -262,6 +287,24 @@ HRESULT RendererContext::CalculateIrradianceMap(
 ) const
 {
 	return m_pHDRITextureLoader->CalculateIrradianceMap(pTextureCubeSRV, ppIrradianceMap, ppIrradianceMapSRV);
+}
+
+HRESULT RendererContext::CalculatePreintegratedBRDF(
+	ID3D11Texture2D** ppPBRDFTexture,
+	ID3D11ShaderResourceView** ppPBRDFTextureSRV
+) const
+{
+	return m_pPreintegratedBRDF->CalculatePreintegratedBRDF(ppPBRDFTexture, ppPBRDFTextureSRV);
+}
+
+HRESULT RendererContext::CalculatePrefilteredColor(
+	ID3D11Texture2D* pEnviroment,
+	ID3D11ShaderResourceView* pEnviromentSRV,
+	ID3D11Texture2D** ppPrefilteredColor,
+	ID3D11ShaderResourceView** ppPrefilteredColorSRV
+) const
+{
+	return m_pPrefilteredColor->CalculatePrefilteredColor(pEnviroment, pEnviromentSRV, ppPrefilteredColor, ppPrefilteredColorSRV);
 }
 
 

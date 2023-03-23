@@ -282,9 +282,9 @@ HRESULT HDRITextureLoader::LoadTextureCubeFromHDRI(
 		D3D11_TEXTURE2D_DESC cubeTextureDesc = CreateDefaultTexture2DDesc(
 			DXGI_FORMAT_R32G32B32A32_FLOAT,
 			m_cubeTextureSize, m_cubeTextureSize,
-			D3D11_BIND_SHADER_RESOURCE
+			D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET
 		);
-		cubeTextureDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE;
+		cubeTextureDesc.MiscFlags = D3D11_RESOURCE_MISC_TEXTURECUBE | D3D11_RESOURCE_MISC_GENERATE_MIPS;
 		cubeTextureDesc.ArraySize = 6;
 
 		hr = pDevice->CreateTexture2D(&cubeTextureDesc, nullptr, ppTextureCube);

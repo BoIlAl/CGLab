@@ -3,6 +3,8 @@ static const uint MaxLightNum = 3;
 static const float PI = 3.14159265f;
 
 TextureCube DiffuseIrradianceMap : register(t0);
+TextureCube EnvMap : register(t1);
+Texture2D BRDFLut : register(t2);
 
 cbuffer ConstantBuffer : register(b0)
 {
@@ -94,12 +96,9 @@ float GeometryFunction(float3 normal, float3 dirToView, float3 dirToLight, float
 }
 
 
-float3 FresnelSchlickRoughnessFunction(float3 dirToView, float3 normal, float3 metalF0, float metalness, float roughness)
+float3 FresnelSchlickRoughnessFunction(float3 F0, float3 dirToView, float3 normal, float roughness)
 {
-    metalness = saturate(metalness);
     float invRoughness = max(1 - roughness, 0.001f);
-    
-    float3 F0 = max((0.04f, 0.04f, 0.04f) * (1 - metalness) + metalF0 * metalness, float3(0.0f, 0.0f, 0.0f));
     
     return F0 + (max(float3(invRoughness, invRoughness, invRoughness), F0) - F0) * pow(1 - dot(dirToView, normal), 5.0f);
 }
@@ -151,6 +150,8 @@ float4 PS(VSOut input) : SV_TARGET
 {
     float3 resultColor = float3(0.0f, 0.0f, 0.0f);
     float3 normal = normalize(input.worldNormal);
+    float3 v = normalize(cameraPosition - input.worldPosition.xyz);
+    float roughness = roughnessMetalness.r;
     
     for (uint i = 0; i < lightsCount.r; ++i)
     {
@@ -166,18 +167,18 @@ float4 PS(VSOut input) : SV_TARGET
         resultColor += BRDF(input.worldPosition.xyz, lights[i].position, normal) * lightInpact;
     }
     
-    float3 kS = FresnelSchlickRoughnessFunction(
-        normalize(cameraPosition - input.worldPosition.xyz), 
-        normal, 
-        albedo, 
-        roughnessMetalness.g, 
-        roughnessMetalness.r
-    );
+    static const float MAX_REFLECTION_LOD = 4.0;
+    float3 prefilteredColor = EnvMap.SampleLevel(MinMagLinearSampler, normalize(2.0 * dot(v, normal) * normal - v), roughness * MAX_REFLECTION_LOD);
+    float3 F0 = lerp(float3(0.04, 0.04, 0.04), albedo, roughnessMetalness.g);
+    float2 envBRDF = BRDFLut.Sample(MinMagLinearSampler, saturate(float2(max(dot(normal, v), 0.0), roughness)));
+    float3 specular = prefilteredColor * (F0 * envBRDF.x + envBRDF.y);
+
+    float3 kS = FresnelSchlickRoughnessFunction(F0, v, normal, roughness);
     float3 kD = float3(1.0, 1.0, 1.0) - saturate(kS);
     kD *= 1.0 - roughnessMetalness.g;
     float3 irradiance = DiffuseIrradianceMap.Sample(MinMagLinearSampler, normal).rgb;
     float3 diffuse = irradiance * albedo.xyz;
-    float3 ambient = kD * diffuse;
+    float3 ambient = (kD * diffuse + specular);
     
     return float4(resultColor + ambient, 1.0f);
 }

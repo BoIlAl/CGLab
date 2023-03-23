@@ -118,6 +118,12 @@ private:
 	ID3D11Texture2D* m_pIrradianceMap;
 	ID3D11ShaderResourceView* m_pIrradianceMapSRV;
 
+	ID3D11Texture2D* m_pPBRDFTexture;
+	ID3D11ShaderResourceView* m_pPBRDFTextureSRV;
+
+	ID3D11Texture2D* m_pPrefilteredColorTexture;
+	ID3D11ShaderResourceView* m_pPPrefilteredColorTextureSRV;
+
 	ID3D11Buffer* m_pPBRBuffer;
 
 	UINT m_windowWidth;

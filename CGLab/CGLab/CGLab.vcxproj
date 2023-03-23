@@ -103,6 +103,8 @@
     <ClInclude Include="imGui\imstb_textedit.h" />
     <ClInclude Include="imGui\imstb_truetype.h" />
     <ClInclude Include="light.h" />
+    <ClInclude Include="prefilteredColor.h" />
+    <ClInclude Include="preintegratedBRDF.h" />
     <ClInclude Include="renderer.h" />
     <ClInclude Include="rendererContext.h" />
     <ClInclude Include="shaderCompiler.h" />
@@ -123,6 +125,8 @@
     <ClCompile Include="imGui\imgui_tables.cpp" />
     <ClCompile Include="imGui\imgui_widgets.cpp" />
     <ClCompile Include="light.cpp" />
+    <ClCompile Include="prefilteredColor.cpp" />
+    <ClCompile Include="preintegratedBRDF.cpp" />
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="rendererContext.cpp" />
     <ClCompile Include="shaderCompiler.cpp" />
@@ -179,6 +183,16 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\irradianceMap.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\preintegratedBRDF.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\prefilteredColor.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

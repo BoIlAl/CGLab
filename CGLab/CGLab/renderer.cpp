@@ -88,6 +88,10 @@ Renderer::Renderer()
 	, m_pEnvironmentCubeMapSRV(nullptr)
 	, m_pIrradianceMap(nullptr)
 	, m_pIrradianceMapSRV(nullptr)
+	, m_pPBRDFTexture(nullptr)
+	, m_pPBRDFTextureSRV(nullptr)
+	, m_pPrefilteredColorTexture(nullptr)
+	, m_pPPrefilteredColorTextureSRV(nullptr)
 	, m_pEnvironmentSphere(nullptr)
 	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
@@ -187,6 +191,10 @@ void Renderer::Release()
 	SafeRelease(m_pEnvironmentCubeMap);
 	SafeRelease(m_pIrradianceMap);
 	SafeRelease(m_pIrradianceMapSRV);
+	SafeRelease(m_pPBRDFTexture);
+	SafeRelease(m_pPBRDFTextureSRV);
+	SafeRelease(m_pPrefilteredColorTexture);
+	SafeRelease(m_pPPrefilteredColorTextureSRV);
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
@@ -361,7 +369,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	if (SUCCEEDED(hr))
 	{
 		D3D11_SAMPLER_DESC samplerDesc = {};
-		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
 		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
 		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -640,6 +648,26 @@ HRESULT Renderer::CreateSceneResources()
 		);
 	}
 
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pContext->CalculatePreintegratedBRDF(
+			&m_pPBRDFTexture,
+			&m_pPBRDFTextureSRV
+		);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pContext->GetContext()->GenerateMips(m_pEnvironmentCubeMapSRV);
+
+		hr = m_pContext->CalculatePrefilteredColor(
+			m_pEnvironmentCubeMap,
+			m_pEnvironmentCubeMapSRV,
+			&m_pPrefilteredColorTexture,
+			&m_pPPrefilteredColorTextureSRV
+		);
+	}
+
 	return hr;
 }
 
@@ -843,7 +871,8 @@ void Renderer::RenderScene()
 	pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	pContext->PSSetShaderResources(0, 1, &m_pIrradianceMapSRV);
+	ID3D11ShaderResourceView* SRVs[] = { m_pIrradianceMapSRV, m_pPPrefilteredColorTextureSRV, m_pPBRDFTextureSRV};
+	pContext->PSSetShaderResources(0, _countof(SRVs), SRVs);
 	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
