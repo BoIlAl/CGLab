@@ -83,7 +83,7 @@ Renderer::Renderer()
 	, m_pEnvironmentPShader(nullptr)
 	, m_pInputLayout(nullptr)
 	, m_pConstantBuffer(nullptr)
-	, m_pMinMagLinearSampler(nullptr)
+	, m_pMinMagMipLinearSampler(nullptr)
 	, m_pEnvironmentCubeMap(nullptr)
 	, m_pEnvironmentCubeMapSRV(nullptr)
 	, m_pIrradianceMap(nullptr)
@@ -198,7 +198,8 @@ void Renderer::Release()
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
-	SafeRelease(m_pMinMagLinearSampler);
+	SafeRelease(m_MinMagMipLinearSamplerClamp);
+	SafeRelease(m_pMinMagMipLinearSampler);
 	SafeRelease(m_pEnvironmentPShader);
 	SafeRelease(m_pEnvironmentVShader);
 	SafeRelease(m_pLightBuffer);
@@ -377,7 +378,16 @@ HRESULT Renderer::CreatePipelineStateObjects()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-		hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
+		hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagMipLinearSampler);
+
+		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+
+		if (SUCCEEDED(hr))
+		{
+			hr = pDevice->CreateSamplerState(&samplerDesc, &m_MinMagMipLinearSamplerClamp);
+		}
 	}
 
 	if (SUCCEEDED(hr))
@@ -873,7 +883,9 @@ void Renderer::RenderScene()
 
 	ID3D11ShaderResourceView* SRVs[] = { m_pIrradianceMapSRV, m_pPPrefilteredColorTextureSRV, m_pPBRDFTextureSRV};
 	pContext->PSSetShaderResources(0, _countof(SRVs), SRVs);
-	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+
+	ID3D11SamplerState* samplers[] = { m_pMinMagMipLinearSampler, m_MinMagMipLinearSamplerClamp };
+	pContext->PSSetSamplers(0, 2, samplers);
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
@@ -919,7 +931,7 @@ void Renderer::RenderEnvironment()
 
 	pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
 	pContext->RSSetState(m_pRasterizerStateFront);
-	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+	pContext->PSSetSamplers(0, 1, &m_pMinMagMipLinearSampler);
 
 	pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
 	pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);

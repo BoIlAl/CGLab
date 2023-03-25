@@ -96,7 +96,8 @@ private:
 	ID3D11RasterizerState* m_pRasterizerState;
 	ID3D11RasterizerState* m_pRasterizerStateFront;
 	ID3D11DepthStencilState* m_pDepthStencilState;
-	ID3D11SamplerState* m_pMinMagLinearSampler;
+	ID3D11SamplerState* m_pMinMagMipLinearSampler;
+	ID3D11SamplerState* m_MinMagMipLinearSamplerClamp;
 
 	std::vector<Mesh*> m_meshes;
 	Mesh* m_pEnvironmentSphere;
