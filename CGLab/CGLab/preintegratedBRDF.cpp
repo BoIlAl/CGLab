@@ -1,108 +1,138 @@
 #include "preintegratedBRDF.h"
 
-PreintegratedBRDF::~PreintegratedBRDF()
+PreintegratedBRDFBuilder::~PreintegratedBRDFBuilder()
 {
-	SafeRelease(m_pPBRDFTextureRTV);
+	SafeRelease(m_pTmpTexture);
+	SafeRelease(m_pTmpTextureRTV);
 	SafeRelease(m_pPreintegratedBRDFVS);
 	SafeRelease(m_pPreintegratedBRDFPS);
 	SafeRelease(m_pRasterizerState);
 }
 
-PreintegratedBRDF::PreintegratedBRDF(RendererContext* pContext)
+PreintegratedBRDFBuilder::PreintegratedBRDFBuilder(RendererContext* pContext, UINT maxTextureSize)
 	: m_pContext(pContext)
-	, m_pPBRDFTextureRTV(nullptr)
+	, m_pTmpTexture(nullptr)
+	, m_pTmpTextureRTV(nullptr)
 	, m_pPreintegratedBRDFVS(nullptr)
 	, m_pPreintegratedBRDFPS(nullptr)
 	, m_pRasterizerState(nullptr)
+	, m_preintegratedBRDFsize(maxTextureSize)
 {}
 
-PreintegratedBRDF* PreintegratedBRDF::Create(RendererContext* pContext)
+PreintegratedBRDFBuilder* PreintegratedBRDFBuilder::Create(RendererContext* pContext, UINT maxTextureSize)
 {
-	PreintegratedBRDF* pPreintegratedBRDF = new PreintegratedBRDF(pContext);
-	if (pPreintegratedBRDF != nullptr)
+	PreintegratedBRDFBuilder* pPreintegratedBRDFBuilder = new PreintegratedBRDFBuilder(pContext, maxTextureSize);
+
+	if (pPreintegratedBRDFBuilder != nullptr)
 	{
-		HRESULT hr = pPreintegratedBRDF->CreatePipelineStateObjects();
+		HRESULT hr = pPreintegratedBRDFBuilder->CreatePipelineStateObjects();
+
 		if (SUCCEEDED(hr))
 		{
-			return pPreintegratedBRDF;
+			hr = pPreintegratedBRDFBuilder->CreateResources();
 		}
-		else
+
+		if (SUCCEEDED(hr))
 		{
-			delete pPreintegratedBRDF;
-			return nullptr;
+			return pPreintegratedBRDFBuilder;
 		}
 	}
+
+	delete pPreintegratedBRDFBuilder;
 	return nullptr;
 }
 
-HRESULT PreintegratedBRDF::CalculatePreintegratedBRDF(
+HRESULT PreintegratedBRDFBuilder::CalculatePreintegratedBRDF(
 	ID3D11Texture2D** ppPBRDFTexture,
-	ID3D11ShaderResourceView** ppPBRDFTextureSRV
+	ID3D11ShaderResourceView** ppPBRDFTextureSRV,
+	UINT textureSize
 )
 {
-	ID3D11DeviceContext* pContext = m_pContext->GetContext();
-	ID3D11Device* pDevice = m_pContext->GetDevice();
+	if (textureSize > m_preintegratedBRDFsize)
+	{
+		return E_FAIL;
+	}
 
-	m_pContext->BeginEvent(L"Preintegrated BRDF");
+	ID3D11Device* pDevice = m_pContext->GetDevice();
 	
 	D3D11_TEXTURE2D_DESC PBRDFTextureDesc = CreateDefaultTexture2DDesc(
 		DXGI_FORMAT_R32G32_FLOAT,
-		m_preintegratedBRDFsize, m_preintegratedBRDFsize,
-		D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE
+		textureSize, textureSize,
+		D3D11_BIND_SHADER_RESOURCE
 	);
 
 	HRESULT hr = pDevice->CreateTexture2D(&PBRDFTextureDesc, nullptr, ppPBRDFTexture);
 	
 	if (SUCCEEDED(hr))
 	{
-		hr = pDevice->CreateRenderTargetView(*ppPBRDFTexture, nullptr, &m_pPBRDFTextureRTV);
-	}
-
-	if (SUCCEEDED(hr))
-	{
 		hr = pDevice->CreateShaderResourceView(*ppPBRDFTexture, nullptr, ppPBRDFTextureSRV);
 	}
 
-
 	if (SUCCEEDED(hr))
 	{
-		pContext->OMSetRenderTargets(1, &m_pPBRDFTextureRTV, nullptr);
-
-		D3D11_VIEWPORT viewport = {};
-		viewport.TopLeftY = 0;
-		viewport.TopLeftX = 0;
-		viewport.Width = (FLOAT)m_preintegratedBRDFsize;
-		viewport.Height = (FLOAT)m_preintegratedBRDFsize;
-		viewport.MinDepth = 0;
-		viewport.MaxDepth = 1;
-		
-
-		D3D11_RECT rect = {};
-		rect.left = 0;
-		rect.top = 0;
-		rect.right = m_preintegratedBRDFsize;
-		rect.bottom = m_preintegratedBRDFsize;
-
-		pContext->RSSetViewports(1, &viewport);
-		pContext->RSSetScissorRects(1, &rect);
-
-		pContext->RSSetState(m_pRasterizerState);
-
-		pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-		pContext->IASetInputLayout(nullptr);
-
-		pContext->VSSetShader(m_pPreintegratedBRDFVS, nullptr, 0);
-		pContext->PSSetShader(m_pPreintegratedBRDFPS, nullptr, 0);
-
-		pContext->Draw(4, 0);
+		RenderPreintegratedBRDF(*ppPBRDFTexture, textureSize);
 	}
-
-	m_pContext->EndEvent();
 
 	return hr;
 }
 
-HRESULT PreintegratedBRDF::CreatePipelineStateObjects()
+void PreintegratedBRDFBuilder::RenderPreintegratedBRDF(ID3D11Texture2D* pTargetTexture, UINT targetSize)
+{
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
+	m_pContext->BeginEvent(L"Preintegrated BRDF");
+
+	pContext->ClearState();
+	pContext->OMSetRenderTargets(1, &m_pTmpTextureRTV, nullptr);
+	
+	D3D11_VIEWPORT viewport = {};
+	viewport.TopLeftY = 0;
+	viewport.TopLeftX = 0;
+	viewport.Width = (FLOAT)targetSize;
+	viewport.Height = (FLOAT)targetSize;
+	viewport.MinDepth = 0;
+	viewport.MaxDepth = 1;
+
+	D3D11_RECT rect = {};
+	rect.left = 0;
+	rect.top = 0;
+	rect.right = targetSize;
+	rect.bottom = targetSize;
+
+	D3D11_BOX srcBox = {};
+	srcBox.left = 0;
+	srcBox.top = 0;
+	srcBox.front = 0;
+	srcBox.right = targetSize;
+	srcBox.bottom = targetSize;
+	srcBox.back = 1;
+
+	pContext->RSSetViewports(1, &viewport);
+	pContext->RSSetScissorRects(1, &rect);
+
+	pContext->RSSetState(m_pRasterizerState);
+
+	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+	pContext->IASetInputLayout(nullptr);
+
+	pContext->VSSetShader(m_pPreintegratedBRDFVS, nullptr, 0);
+	pContext->PSSetShader(m_pPreintegratedBRDFPS, nullptr, 0);
+
+	pContext->Draw(4, 0);
+
+	pContext->CopySubresourceRegion(
+		pTargetTexture,
+		0,
+		0, 0, 0,
+		m_pTmpTexture,
+		0,
+		&srcBox
+	);
+
+	m_pContext->EndEvent();
+}
+
+HRESULT PreintegratedBRDFBuilder::CreatePipelineStateObjects()
 {
 	HRESULT hr = S_OK;
 	ID3DBlob* pVSBlob = nullptr;
@@ -137,4 +167,24 @@ HRESULT PreintegratedBRDF::CreatePipelineStateObjects()
 	}
 
 	return hr;	
+}
+
+HRESULT PreintegratedBRDFBuilder::CreateResources()
+{
+	ID3D11Device* pDevice = m_pContext->GetDevice();
+
+	D3D11_TEXTURE2D_DESC PBRDFTextureDesc = CreateDefaultTexture2DDesc(
+		DXGI_FORMAT_R32G32_FLOAT,
+		m_preintegratedBRDFsize, m_preintegratedBRDFsize,
+		D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE
+	);
+
+	HRESULT hr = pDevice->CreateTexture2D(&PBRDFTextureDesc, nullptr, &m_pTmpTexture);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDevice->CreateRenderTargetView(m_pTmpTexture, nullptr, &m_pTmpTextureRTV);
+	}
+
+	return hr;
 }

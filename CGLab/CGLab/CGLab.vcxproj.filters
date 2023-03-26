@@ -93,7 +93,7 @@
     <ClInclude Include="preintegratedBRDF.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="prefilteredColor.h">
+    <ClInclude Include="environment.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>
@@ -149,7 +149,7 @@
     <ClCompile Include="preintegratedBRDF.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="prefilteredColor.cpp">
+    <ClCompile Include="environment.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>

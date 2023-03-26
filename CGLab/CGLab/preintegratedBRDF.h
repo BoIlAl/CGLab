@@ -2,31 +2,38 @@
 #include "framework.h"
 #include "rendererContext.h"
 
-class PreintegratedBRDF
+class PreintegratedBRDFBuilder
 {
 public:
-	static PreintegratedBRDF* Create(RendererContext* pContext);
+	static PreintegratedBRDFBuilder* Create(RendererContext* pContext, UINT maxTextureSize);
+
+	~PreintegratedBRDFBuilder();
+
 	HRESULT CalculatePreintegratedBRDF(
 		ID3D11Texture2D** ppPBRDFTexture,
-		ID3D11ShaderResourceView** ppPBRDFTextureSRV
+		ID3D11ShaderResourceView** ppPBRDFTextureSRV,
+		UINT textureSize
 	);
 
 
-	~PreintegratedBRDF();
 private:
-	PreintegratedBRDF(RendererContext* pContext);
+	PreintegratedBRDFBuilder(RendererContext* pContext, UINT maxTextureSize);
 
 	HRESULT CreatePipelineStateObjects();
+	HRESULT CreateResources();
+
+	void RenderPreintegratedBRDF(ID3D11Texture2D* pTargetTexture, UINT targetSize);
 
 private:
-	const UINT m_preintegratedBRDFsize = 128u;
-
 	RendererContext* m_pContext;
 
-	ID3D11RenderTargetView* m_pPBRDFTextureRTV;
+	ID3D11Texture2D* m_pTmpTexture;
+	ID3D11RenderTargetView* m_pTmpTextureRTV;
 
 	ID3D11VertexShader* m_pPreintegratedBRDFVS;
 	ID3D11PixelShader* m_pPreintegratedBRDFPS;
 
 	ID3D11RasterizerState* m_pRasterizerState;
+
+	UINT m_preintegratedBRDFsize;
 };

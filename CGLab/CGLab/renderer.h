@@ -3,6 +3,7 @@
 #include "framework.h"
 #include "light.h"
 #include "common.h"
+#include "environment.h"
 #include "rendererContext.h"
 
 struct IDXGIFactory;
@@ -30,7 +31,6 @@ class Camera;
 static constexpr UINT MaxLightNum = 3;
 
 
-// TODO: divide into renderer and context
 class Renderer
 {
 public:
@@ -114,16 +114,10 @@ private:
 
 	ID3D11InputLayout* m_pInputLayout;
 
-	ID3D11Texture2D* m_pEnvironmentCubeMap;
-	ID3D11ShaderResourceView* m_pEnvironmentCubeMapSRV;
-	ID3D11Texture2D* m_pIrradianceMap;
-	ID3D11ShaderResourceView* m_pIrradianceMapSRV;
-
 	ID3D11Texture2D* m_pPBRDFTexture;
 	ID3D11ShaderResourceView* m_pPBRDFTextureSRV;
 
-	ID3D11Texture2D* m_pPrefilteredColorTexture;
-	ID3D11ShaderResourceView* m_pPPrefilteredColorTextureSRV;
+	Environment* m_pEnvironment;
 
 	ID3D11Buffer* m_pPBRBuffer;
 

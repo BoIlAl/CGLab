@@ -9,8 +9,7 @@ struct ID3DUserDefinedAnnotation;
 struct ID3D11Texture2D;
 struct ID3D11ShaderResourceView;
 
-class PreintegratedBRDF;
-class PrefilteredColor;
+class PreintegratedBRDFBuilder;
 class HDRITextureLoader;
 
 
@@ -63,21 +62,20 @@ public:
 	) const;
 
 	HRESULT CalculateIrradianceMap(
-		ID3D11ShaderResourceView* pTextureCubeSRV,
+		ID3D11ShaderResourceView* pEnvironmentCubeSRV,
 		ID3D11Texture2D** ppIrradianceMap,
 		ID3D11ShaderResourceView** ppIrradianceMapSRV
+	) const;
+
+	HRESULT CalculatePrefilteredColor(
+		ID3D11ShaderResourceView* pEnvironmentCubeSRV,
+		ID3D11Texture2D** ppPrefilteredColor,
+		ID3D11ShaderResourceView** ppPrefilteredColorSRV
 	) const;
 
 	HRESULT CalculatePreintegratedBRDF(
 		ID3D11Texture2D** ppPBRDFTexture,
 		ID3D11ShaderResourceView** ppPBRDFTextureSRV
-	)const;
-
-	HRESULT CalculatePrefilteredColor(
-		ID3D11Texture2D* pEnviroment,
-		ID3D11ShaderResourceView* pEnviromentSRV,
-		ID3D11Texture2D** ppPrefilteredColor,
-		ID3D11ShaderResourceView** ppPrefilteredColorSRV
 	) const;
 
 	HRESULT CreateSphereMesh(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh) const;
@@ -96,8 +94,7 @@ private:
 	ShaderCompiler* m_pShaderCompiler;
 	HDRITextureLoader* m_pHDRITextureLoader;
 
-	PreintegratedBRDF* m_pPreintegratedBRDF;
-	PrefilteredColor* m_pPrefilteredColor;
+	PreintegratedBRDFBuilder* m_pPreintegratedBRDFBuilder;
 
 	bool m_isDebug;
 };

@@ -1,4 +1,5 @@
 static const float PI = 3.14159265f;
+static const uint SAMPLE_COUNT = 1024u;
 
 TextureCube EnvironmentMap : register(t0);
 
@@ -102,7 +103,6 @@ float4 PS(VSOut input) : SV_TARGET
     float3 view = norm;
     float totalWeight = 0.0;
     float3 prefilteredColor = float3(0.0, 0.0, 0.0);
-    static const uint SAMPLE_COUNT = 1024u;
 
     for (uint i = 0u; i < SAMPLE_COUNT; ++i)
     {
@@ -127,8 +127,8 @@ float4 PS(VSOut input) : SV_TARGET
             totalWeight += ndotl;
         }
     }
-    prefilteredColor = prefilteredColor / totalWeight;
+    prefilteredColor /= totalWeight;
 
-    return float4(prefilteredColor.r, prefilteredColor.g, prefilteredColor.b, 0.0);
+    return float4(prefilteredColor, 0.0);
 }
 
