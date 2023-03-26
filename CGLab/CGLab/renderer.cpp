@@ -83,11 +83,10 @@ Renderer::Renderer()
 	, m_pEnvironmentPShader(nullptr)
 	, m_pInputLayout(nullptr)
 	, m_pConstantBuffer(nullptr)
-	, m_pMinMagLinearSampler(nullptr)
-	, m_pEnvironmentCubeMap(nullptr)
-	, m_pEnvironmentCubeMapSRV(nullptr)
-	, m_pIrradianceMap(nullptr)
-	, m_pIrradianceMapSRV(nullptr)
+	, m_pMinMagMipLinearSampler(nullptr)
+	, m_pPBRDFTexture(nullptr)
+	, m_pPBRDFTextureSRV(nullptr)
+	, m_pEnvironment(nullptr)
 	, m_pEnvironmentSphere(nullptr)
 	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
@@ -183,14 +182,13 @@ bool Renderer::InitImGui(HWND hWnd)
 void Renderer::Release()
 {
 	SafeRelease(m_pPBRBuffer);
-	SafeRelease(m_pEnvironmentCubeMapSRV);
-	SafeRelease(m_pEnvironmentCubeMap);
-	SafeRelease(m_pIrradianceMap);
-	SafeRelease(m_pIrradianceMapSRV);
+	SafeRelease(m_pPBRDFTexture);
+	SafeRelease(m_pPBRDFTextureSRV);
 	SafeRelease(m_pInputLayout);
 	SafeRelease(m_pPixelShader);
 	SafeRelease(m_pVertexShader);
-	SafeRelease(m_pMinMagLinearSampler);
+	SafeRelease(m_MinMagMipLinearSamplerClamp);
+	SafeRelease(m_pMinMagMipLinearSampler);
 	SafeRelease(m_pEnvironmentPShader);
 	SafeRelease(m_pEnvironmentVShader);
 	SafeRelease(m_pLightBuffer);
@@ -206,6 +204,7 @@ void Renderer::Release()
 	SafeRelease(m_pSwapChain);
 	SafeRelease(m_pConstantBuffer);
 
+	delete m_pEnvironment;
 	delete m_pEnvironmentSphere;
 	delete m_pToneMapping;
 	delete m_pCamera;
@@ -361,7 +360,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	if (SUCCEEDED(hr))
 	{
 		D3D11_SAMPLER_DESC samplerDesc = {};
-		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+		samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
 		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
 		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -369,7 +368,16 @@ HRESULT Renderer::CreatePipelineStateObjects()
 		samplerDesc.MinLOD = 0;
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-		hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
+		hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagMipLinearSampler);
+
+		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+
+		if (SUCCEEDED(hr))
+		{
+			hr = pDevice->CreateSamplerState(&samplerDesc, &m_MinMagMipLinearSamplerClamp);
+		}
 	}
 
 	if (SUCCEEDED(hr))
@@ -624,19 +632,19 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
-		hr = m_pContext->LoadTextureCubeFromHDRI(
-			"data/hdri/brown_photostudio_05_4k.hdr",
-			&m_pEnvironmentCubeMap,
-			&m_pEnvironmentCubeMapSRV
-		);
+		m_pEnvironment = Environment::CreateEnvironment(m_pContext, "data/hdri/brown_photostudio_05_4k.hdr");
+
+		if (m_pEnvironment == nullptr)
+		{
+			hr = E_FAIL;
+		}
 	}
 
 	if (SUCCEEDED(hr))
 	{
-		hr = m_pContext->CalculateIrradianceMap(
-			m_pEnvironmentCubeMapSRV,
-			&m_pIrradianceMap,
-			&m_pIrradianceMapSRV
+		hr = m_pContext->CalculatePreintegratedBRDF(
+			&m_pPBRDFTexture,
+			&m_pPBRDFTextureSRV
 		);
 	}
 
@@ -843,8 +851,16 @@ void Renderer::RenderScene()
 	pContext->VSSetShader(m_pVertexShader, nullptr, 0);
 	pContext->PSSetShader(m_pPixelShader, nullptr, 0);
 
-	pContext->PSSetShaderResources(0, 1, &m_pIrradianceMapSRV);
-	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+	ID3D11ShaderResourceView* SRVs[] =
+	{
+		m_pEnvironment->GetTextureSRV(Environment::Type::kIrradianceMap),
+		m_pEnvironment->GetTextureSRV(Environment::Type::kPrefilteredColorTexture),
+		m_pPBRDFTextureSRV
+	};
+	pContext->PSSetShaderResources(0, _countof(SRVs), SRVs);
+
+	ID3D11SamplerState* samplers[] = { m_pMinMagMipLinearSampler, m_MinMagMipLinearSamplerClamp };
+	pContext->PSSetSamplers(0, 2, samplers);
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
@@ -886,11 +902,11 @@ void Renderer::RenderEnvironment()
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer };
+	ID3D11ShaderResourceView* SRVs[] = { m_pEnvironment->GetTextureSRV(Environment::Type::kColorTexture) };
 
-	pContext->PSSetShaderResources(0, 1, &m_pEnvironmentCubeMapSRV);
+	pContext->PSSetShaderResources(0, _countof(SRVs), SRVs);
 	pContext->RSSetState(m_pRasterizerStateFront);
-	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+	pContext->PSSetSamplers(0, 1, &m_pMinMagMipLinearSampler);
 
 	pContext->VSSetShader(m_pEnvironmentVShader, nullptr, 0);
 	pContext->PSSetShader(m_pEnvironmentPShader, nullptr, 0);
@@ -900,6 +916,7 @@ void Renderer::RenderEnvironment()
 	pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 	pContext->IASetIndexBuffer(m_pEnvironmentSphere->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
+	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer };
 	ConstantBuffer constantBuffer = {};
 
 	DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(m_pEnvironmentSphere->modelMatrix));
@@ -913,4 +930,3 @@ void Renderer::RenderEnvironment()
 
 	m_pContext->EndEvent();
 }
-

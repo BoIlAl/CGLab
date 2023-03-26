@@ -1,11 +1,12 @@
 #include "rendererContext.h"
 
 #include <d3d11_1.h>
-#include <dxgi.h>
 
 #include "common.h"
 #include "WICTextureLoader.h"
 #include "HDRITextureLoader.h"
+
+#include "preintegratedBRDF.h"
 
 
 RendererContext* RendererContext::CreateContext(IDXGIFactory* pFactory)
@@ -28,6 +29,7 @@ RendererContext::RendererContext()
 	, m_pAnnotation(nullptr)
 	, m_pShaderCompiler(nullptr)
 	, m_pHDRITextureLoader(nullptr)
+	, m_pPreintegratedBRDFBuilder(nullptr)
 #if _DEBUG
 	, m_isDebug(true)
 #else
@@ -39,6 +41,7 @@ RendererContext::~RendererContext()
 {
 	delete m_pHDRITextureLoader;
 	delete m_pShaderCompiler;
+	delete m_pPreintegratedBRDFBuilder;
 
 	SafeRelease(m_pAnnotation);
 	SafeRelease(m_pContext);
@@ -129,9 +132,19 @@ bool RendererContext::Init(IDXGIFactory* pFactory)
 
 	if (SUCCEEDED(hr))
 	{
-		m_pHDRITextureLoader = HDRITextureLoader::CreateHDRITextureLoader(this, 512u, 32u);
+		m_pHDRITextureLoader = HDRITextureLoader::CreateHDRITextureLoader(this, 512u, 32u, 128u);
 
 		if (m_pHDRITextureLoader == nullptr)
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pPreintegratedBRDFBuilder = PreintegratedBRDFBuilder::Create(this, 128u);
+
+		if (m_pPreintegratedBRDFBuilder == nullptr)
 		{
 			hr = E_FAIL;
 		}
@@ -256,12 +269,29 @@ HRESULT RendererContext::LoadTextureCubeFromHDRI(
 }
 
 HRESULT RendererContext::CalculateIrradianceMap(
-	ID3D11ShaderResourceView* pTextureCubeSRV,
+	ID3D11ShaderResourceView* pEnvironmentCubeSRV,
 	ID3D11Texture2D** ppIrradianceMap,
 	ID3D11ShaderResourceView** ppIrradianceMapSRV
 ) const
 {
-	return m_pHDRITextureLoader->CalculateIrradianceMap(pTextureCubeSRV, ppIrradianceMap, ppIrradianceMapSRV);
+	return m_pHDRITextureLoader->CalculateIrradianceMap(pEnvironmentCubeSRV, ppIrradianceMap, ppIrradianceMapSRV);
+}
+
+HRESULT RendererContext::CalculatePreintegratedBRDF(
+	ID3D11Texture2D** ppPBRDFTexture,
+	ID3D11ShaderResourceView** ppPBRDFTextureSRV
+) const
+{
+	return m_pPreintegratedBRDFBuilder->CalculatePreintegratedBRDF(ppPBRDFTexture, ppPBRDFTextureSRV, 128u);
+}
+
+HRESULT RendererContext::CalculatePrefilteredColor(
+	ID3D11ShaderResourceView* pEnvironmentCubeSRV,
+	ID3D11Texture2D** ppPrefilteredColor,
+	ID3D11ShaderResourceView** ppPrefilteredColorSRV
+) const
+{
+	return m_pHDRITextureLoader->CalculatePrefilteredColor(pEnvironmentCubeSRV, ppPrefilteredColor, ppPrefilteredColorSRV);
 }
 
 
