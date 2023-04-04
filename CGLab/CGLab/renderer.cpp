@@ -990,6 +990,8 @@ void Renderer::RenderScene()
 	ID3D11VertexShader* pCachedVS = m_pSceneColorTextureVShader;
 	ID3D11PixelShader* pCachedPS = m_pSceneColorTexturePShader;
 
+	D3D_PRIMITIVE_TOPOLOGY cachedTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
 	pContext->VSSetShader(m_pSceneColorTextureVShader, nullptr, 0);
 	pContext->PSSetShader(m_pSceneColorTexturePShader, nullptr, 0);
 
@@ -998,6 +1000,12 @@ void Renderer::RenderScene()
 		for (UINT primitiveIdx = 0; primitiveIdx < pModel->PrimitiveNum(); ++primitiveIdx)
 		{
 			const Model::Primitive& primitive = pModel->GetPrimitive(primitiveIdx);
+
+			if (cachedTopology != primitive.topology)
+			{
+				cachedTopology = primitive.topology;
+				pContext->IASetPrimitiveTopology(primitive.topology);
+			}
 
 			if (primitive.pEmissiveTextureSRV != nullptr)
 			{

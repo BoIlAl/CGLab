@@ -23,6 +23,33 @@ D3D11_TEXTURE_ADDRESS_MODE defineAddressMode(int gltfAddressMode)
 	return D3D11_TEXTURE_ADDRESS_WRAP;
 }
 
+D3D11_PRIMITIVE_TOPOLOGY defineTopology(int gltfTopology)
+{
+	switch (gltfTopology)
+	{
+	case TINYGLTF_MODE_POINTS:
+		return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
+
+	case TINYGLTF_MODE_LINE:
+		return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+
+	case TINYGLTF_MODE_LINE_STRIP:
+		return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
+
+	case TINYGLTF_MODE_TRIANGLES:
+		return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+	case TINYGLTF_MODE_TRIANGLE_STRIP:
+		return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+
+	default:
+		break;
+	}
+	
+	assert(false);
+	return D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+}
+
 char* loadBinaryFile(const std::string& fileName)
 {
 	std::ifstream inFile;
@@ -392,6 +419,7 @@ void Model::SetUpPrimitives(const tinygltf::Model& model)
 		Primitive& primitive = m_primitives[i];
 
 		primitive.pMesh = m_modelMeshes[i];
+		primitive.topology = defineTopology(model.meshes[i].primitives[0].mode);
 
 		int idx = -1;
 		if ((idx = material.pbrMetallicRoughness.baseColorTexture.index) != -1)
