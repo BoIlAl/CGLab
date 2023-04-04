@@ -1,12 +1,14 @@
 #include "rendererContext.h"
 
 #include <d3d11_1.h>
+#include "tiny_gltf.h"
 
 #include "common.h"
 #include "WICTextureLoader.h"
 #include "HDRITextureLoader.h"
 
 #include "preintegratedBRDF.h"
+#include "model.h"
 
 
 RendererContext* RendererContext::CreateContext(IDXGIFactory* pFactory)
@@ -39,6 +41,7 @@ RendererContext::RendererContext()
 
 RendererContext::~RendererContext()
 {
+	delete m_pGLTFLoader;
 	delete m_pHDRITextureLoader;
 	delete m_pShaderCompiler;
 	delete m_pPreintegratedBRDFBuilder;
@@ -148,6 +151,11 @@ bool RendererContext::Init(IDXGIFactory* pFactory)
 		{
 			hr = E_FAIL;
 		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pGLTFLoader = new tinygltf::TinyGLTF();
 	}
 
 	return SUCCEEDED(hr);
@@ -366,4 +374,31 @@ HRESULT RendererContext::CreateSphereMesh(UINT16 latitudeBands, UINT16 longitude
 	}
 
 	return hr;
+}
+
+Model* RendererContext::LoadModel(const std::string& gltfModelFileName, const DirectX::XMMATRIX& initMatrix)
+{
+	Model* pModel = nullptr;
+
+	std::string err;
+	std::string warn;
+	tinygltf::Model model;
+
+	if (m_pGLTFLoader->LoadASCIIFromFile(&model, &err, &warn, gltfModelFileName + "/scene.gltf"))
+	{
+		pModel = Model::CreateModel(this, model, gltfModelFileName, initMatrix);
+	}
+	else
+	{
+		if (!err.empty())
+		{
+			printf("erros: %s\n", err.c_str());
+		}
+		if (!warn.empty())
+		{
+			printf("warnings: %s\n", warn.c_str());
+		}
+	}
+
+	return pModel;
 }

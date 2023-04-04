@@ -3,6 +3,9 @@
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <cstdio>
+#include <vector>
+#include <string>
+#include <cassert>
 
 #include "common.h"
 
@@ -20,7 +23,8 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	const char* shaderFileName,
 	ID3D11VertexShader** ppVS,
 	ID3D10Blob** ppVSBinaryBlob,
-	ID3D11PixelShader** ppPS
+	ID3D11PixelShader** ppPS,
+	const char* defines
 )
 {
 	FILE* pFile = nullptr;
@@ -35,15 +39,10 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	size_t fileSize = ftell(pFile);
 	fseek(pFile, 0, SEEK_SET);
 
-	char* shaderSource = new char[fileSize + 1u];
+	std::string shaderSource;
+	shaderSource.resize(fileSize + 1u);
 
-	if (shaderSource == nullptr)
-	{
-		fclose(pFile);
-		return false;
-	}
-
-	fread(shaderSource, fileSize, 1, pFile);
+	fread(shaderSource.data(), fileSize, 1, pFile);
 	shaderSource[fileSize] = 0;
 
 	fclose(pFile);
@@ -52,7 +51,40 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	
 	UINT flags = m_isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
 
-	HRESULT hr = D3DCompile(shaderSource, fileSize, shaderFileName, nullptr, nullptr, "VS", "vs_5_0", flags, 0, ppVSBinaryBlob, &pErrors);
+	std::string sDefines = defines;
+	std::string addDefines = "";
+
+	if (!sDefines.empty())
+	{
+		sDefines.append(" ");
+	}
+
+	size_t startPos = 0;
+	size_t pos = 0;
+	while ((pos = sDefines.find(' ', startPos)) != std::string::npos)
+	{
+		size_t equalPos = sDefines.find('=', startPos);
+		assert(equalPos != std::string::npos);
+		assert(equalPos < pos);
+
+		sDefines[equalPos] = 0;
+		sDefines[pos] = 0;
+
+		const char* defineName = sDefines.c_str() + startPos;
+		const char* definition = sDefines.c_str() + equalPos + 1;
+
+		addDefines.append(std::string("#define ") + defineName + " " + definition + "\n");
+		
+		startPos = pos + 1;
+	}
+
+	shaderSource.insert(0, addDefines);
+	fileSize += addDefines.size();
+
+	HRESULT hr = D3DCompile(
+		shaderSource.c_str(), fileSize, shaderFileName, nullptr, nullptr,
+		"VS", "vs_5_0", flags, 0, ppVSBinaryBlob, &pErrors
+	);
 
 	if (SUCCEEDED(hr))
 	{
@@ -74,7 +106,10 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	{
 		ID3DBlob* pBlob = nullptr;
 
-		hr = D3DCompile(shaderSource, fileSize, shaderFileName, nullptr, nullptr, "PS", "ps_5_0", flags, 0, &pBlob, &pErrors);
+		hr = D3DCompile(
+			shaderSource.c_str(), fileSize, shaderFileName, nullptr, nullptr,
+			"PS", "ps_5_0", flags, 0, &pBlob, &pErrors
+		);
 
 		if (SUCCEEDED(hr))
 		{
@@ -94,7 +129,6 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	}
 
 	SafeRelease(pErrors);
-	delete[] shaderSource;
 
 	return SUCCEEDED(hr);
 }
