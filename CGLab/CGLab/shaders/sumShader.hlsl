@@ -30,5 +30,5 @@ float4 PS(VSOut input) : SV_TARGET
     float3 colorHDR = HDRTexture.Load(int3(input.position.xy, 0)).rgb;
     float3 colorBloom = BloomTexture.Load(int3(input.position.xy, 0)).rgb;
    
-    return float4(colorHDR, 1.0f);
+    return float4(colorHDR + colorBloom, 1.0f);
 }

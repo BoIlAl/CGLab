@@ -1080,7 +1080,7 @@ void Renderer::PostProcessing()
 	ID3D11ShaderResourceView* pBloomTextureSRV = nullptr;
 	m_pBloom->CalculateBloom(m_pHDRTextureSRV, m_pEmissiveTextureSRV, m_windowWidth, m_windowHeight, &pBloomTexture, &pBloomTextureSRV);
 
-	m_pToneMapping->ToneMap(m_pHDRTextureSRV, m_pBackBufferRTV, m_windowWidth, m_windowHeight, m_timeFromLastFrame / 10e6f);
+	m_pToneMapping->ToneMap(pBloomTextureSRV, m_pBackBufferRTV, m_windowWidth, m_windowHeight, m_timeFromLastFrame / 10e6f);
 
 	SafeRelease(pBloomTexture);
 	SafeRelease(pBloomTextureSRV);

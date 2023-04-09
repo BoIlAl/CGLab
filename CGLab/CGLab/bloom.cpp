@@ -251,7 +251,7 @@ HRESULT Bloom::CalculateBloom(
 		bloomDesc.Usage = D3D11_USAGE_DEFAULT;
 		bloomDesc.CPUAccessFlags = 0;
 		bloomDesc.ArraySize = 1;
-		bloomDesc.MipLevels = 0;
+		bloomDesc.MipLevels = 1;
 		bloomDesc.SampleDesc.Count = 1;
 		bloomDesc.SampleDesc.Quality = 0;
 
@@ -309,7 +309,7 @@ HRESULT Bloom::CalculateBloomMask(
 	bloomMaskDesc.Usage = D3D11_USAGE_DEFAULT;
 	bloomMaskDesc.CPUAccessFlags = 0;
 	bloomMaskDesc.ArraySize = 1;
-	bloomMaskDesc.MipLevels = 0;
+	bloomMaskDesc.MipLevels = 1;
 	bloomMaskDesc.SampleDesc.Count = 1;
 	bloomMaskDesc.SampleDesc.Quality = 0;
 
@@ -457,7 +457,7 @@ HRESULT Bloom::GaussBlurVertical(
 	bloomMaskDesc.Usage = D3D11_USAGE_DEFAULT;
 	bloomMaskDesc.CPUAccessFlags = 0;
 	bloomMaskDesc.ArraySize = 1;
-	bloomMaskDesc.MipLevels = 0;
+	bloomMaskDesc.MipLevels = 1;
 	bloomMaskDesc.SampleDesc.Count = 1;
 	bloomMaskDesc.SampleDesc.Quality = 0;
 
@@ -562,7 +562,7 @@ HRESULT Bloom::GaussBlurHorizontal(
 	bloomMaskDesc.Usage = D3D11_USAGE_DEFAULT;
 	bloomMaskDesc.CPUAccessFlags = 0;
 	bloomMaskDesc.ArraySize = 1;
-	bloomMaskDesc.MipLevels = 0;
+	bloomMaskDesc.MipLevels = 1;
 	bloomMaskDesc.SampleDesc.Count = 1;
 	bloomMaskDesc.SampleDesc.Quality = 0;
 
