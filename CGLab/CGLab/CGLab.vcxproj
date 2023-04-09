@@ -89,6 +89,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="app.h" />
+    <ClInclude Include="bloom.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="CGLab.h" />
     <ClInclude Include="common.h" />
@@ -118,6 +119,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="app.cpp" />
+    <ClCompile Include="bloom.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="CGLab.cpp" />
     <ClCompile Include="environment.cpp" />
@@ -198,6 +200,16 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\prefilteredColor.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\bloomMask.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\GaussBlur.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

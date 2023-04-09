@@ -15,6 +15,7 @@
 #include "camera.h"
 #include "app.h"
 #include "model.h"
+#include "bloom.h"
 
 #include "imGui/imgui_impl_dx11.h"
 #include "imGui/imgui_impl_win32.h"
@@ -76,6 +77,7 @@ Renderer::Renderer()
 	, m_pHDRTextureSRV(nullptr)
 	, m_pEmissiveTexture(nullptr)
 	, m_pEmissiveTextureRTV(nullptr)
+	, m_pEmissiveTextureSRV(nullptr)
 	, m_pRasterizerState(nullptr)
 	, m_pRasterizerStateFront(nullptr)
 	, m_pDepthStencilState(nullptr)
@@ -105,6 +107,7 @@ Renderer::Renderer()
 	, m_timeFromLastFrame(0)
 	, m_pCamera(nullptr)
 	, m_pToneMapping(nullptr)
+	, m_pBloom(nullptr)
 {}
 
 Renderer::~Renderer()
@@ -212,6 +215,7 @@ void Renderer::Release()
 	SafeRelease(m_pRasterizerState);
 	SafeRelease(m_pRasterizerStateFront);
 	SafeRelease(m_pEmissiveTextureRTV);
+	SafeRelease(m_pEmissiveTextureSRV);
 	SafeRelease(m_pEmissiveTexture);
 	SafeRelease(m_pHDRTextureSRV);
 	SafeRelease(m_pHDRTextureRTV);
@@ -225,6 +229,7 @@ void Renderer::Release()
 	delete m_pEnvironment;
 	delete m_pEnvironmentSphere;
 	delete m_pToneMapping;
+	delete m_pBloom;
 	delete m_pCamera;
 
 	for (auto& mesh : m_meshes)
@@ -348,7 +353,7 @@ HRESULT Renderer::CreateBackBuffer()
 		emissiveTextureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
 		emissiveTextureDesc.Width = m_windowWidth;
 		emissiveTextureDesc.Height = m_windowHeight;
-		emissiveTextureDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+		emissiveTextureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 		emissiveTextureDesc.Usage = D3D11_USAGE_DEFAULT;
 		emissiveTextureDesc.CPUAccessFlags = 0;
 		emissiveTextureDesc.ArraySize = 1;
@@ -362,6 +367,11 @@ HRESULT Renderer::CreateBackBuffer()
 	if (SUCCEEDED(hr))
 	{
 		hr = pDevice->CreateRenderTargetView(m_pEmissiveTexture, nullptr, &m_pEmissiveTextureRTV);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDevice->CreateShaderResourceView(m_pEmissiveTexture, nullptr, &m_pEmissiveTextureSRV);
 	}
 
 	return hr;
@@ -699,6 +709,16 @@ HRESULT Renderer::CreateSceneResources()
 		m_pToneMapping = ToneMapping::CreateToneMapping(m_pContext, App::MaxWindowSize);
 
 		if (m_pToneMapping == nullptr)
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pBloom = Bloom::Create(m_pContext);
+
+		if (m_pBloom == nullptr)
 		{
 			hr = E_FAIL;
 		}
