@@ -26,6 +26,7 @@ struct ID3D11Resource;
 class ShaderCompiler;
 class ToneMapping;
 class Camera;
+class Bloom;
 
 
 static constexpr UINT MaxLightNum = 3;
@@ -97,6 +98,7 @@ private:
 
 	ID3D11Texture2D* m_pEmissiveTexture;
 	ID3D11RenderTargetView* m_pEmissiveTextureRTV;
+	ID3D11ShaderResourceView* m_pEmissiveTextureSRV;
 
 	ID3D11RasterizerState* m_pRasterizerState;
 	ID3D11RasterizerState* m_pRasterizerStateFront;
@@ -145,6 +147,8 @@ private:
 	Camera* m_pCamera;
 
 	ToneMapping* m_pToneMapping;
+
+	Bloom* m_pBloom;
 
 	std::vector<PointLight> m_lights;
 
