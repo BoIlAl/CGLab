@@ -209,7 +209,12 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\GaussBlur.hlsl">
+    <None Include="shaders\gaussBlur.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\sumShader.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

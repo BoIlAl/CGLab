@@ -221,7 +221,10 @@
     <None Include="shaders\bloomMask.hlsl">
       <Filter>shaders</Filter>
     </None>
-    <None Include="shaders\GaussBlur.hlsl">
+    <None Include="shaders\gaussBlur.hlsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\sumShader.hlsl">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>
