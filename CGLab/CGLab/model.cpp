@@ -360,23 +360,32 @@ HRESULT Model::LoadMesh(
 
 	UINT positionIdx = mesh.primitives[0].attributes.at("POSITION");
 	UINT normalIdx = mesh.primitives[0].attributes.at("NORMAL");
+	UINT tangentIdx = mesh.primitives[0].attributes.at("TANGENT");
 	UINT texCoordIdx = mesh.primitives[0].attributes.at("TEXCOORD_0");
 	UINT indicesIdx = mesh.primitives[0].indices;
 
 	const tinygltf::Accessor& positionDataAccessor = model.accessors[positionIdx];
 	const tinygltf::Accessor& normalDataAccessor = model.accessors[normalIdx];
+	const tinygltf::Accessor& tangentDataAccessor = model.accessors[tangentIdx];
 	const tinygltf::Accessor& texCoordDataAccessor = model.accessors[texCoordIdx];
 	const tinygltf::Accessor& indicesDataAccessor = model.accessors[indicesIdx];
 
-	const std::vector<UINT16>& indicesData = LoadUInt16Data(model.bufferViews[indicesDataAccessor.bufferView], indicesDataAccessor);
+	std::vector<UINT16> indicesData = LoadUInt16Data(model.bufferViews[indicesDataAccessor.bufferView], indicesDataAccessor);
+
+	for (size_t i = 0; i + 2 < indicesData.size(); i += 3)
+	{
+		std::swap(indicesData[i + 1], indicesData[i + 2]);
+	}
 
 	const std::vector<float>& positionData = LoadFloatData(model.bufferViews[positionDataAccessor.bufferView], positionDataAccessor);
 	const std::vector<float>& normalData = LoadFloatData(model.bufferViews[normalDataAccessor.bufferView], normalDataAccessor);
+	const std::vector<float>& tangentData = LoadFloatData(model.bufferViews[tangentDataAccessor.bufferView], tangentDataAccessor);
 	const std::vector<float>& texCoordData = LoadFloatData(model.bufferViews[texCoordDataAccessor.bufferView], texCoordDataAccessor);
 
 	{
 		assert(positionData.size() % 3 == 0);
 		assert(positionData.size() == normalData.size());
+		assert(normalData.size() / 3 == tangentData.size() / 4);
 		assert(positionData.size() / 3 == texCoordData.size() / 2);
 	}
 
@@ -387,10 +396,10 @@ HRESULT Model::LoadMesh(
 	{
 		Vertex& vertex = vertices[i];
 
-		vertex.position = { positionData[3 * i + 0], positionData[3 * i + 1], positionData[3 * i + 2] };
-		vertex.normal = { normalData[3 * i + 0], normalData[3 * i + 1], normalData[3 * i + 2] };
+		vertex.position = { -positionData[3 * i + 0], positionData[3 * i + 1], positionData[3 * i + 2] };
+		vertex.normal = { -normalData[3 * i + 0], normalData[3 * i + 1], normalData[3 * i + 2] };
+		vertex.tangent = { -tangentData[4 * i + 0], tangentData[4 * i + 1], tangentData[4 * i + 2], tangentData[4 * i + 3] };
 		vertex.texCoord = { texCoordData[2 * i + 0], texCoordData[2 * i + 1] };
-		vertex.color = { 0.0f, 0.0f, 0.0f, 0.0f };
 	}
 
 	Mesh* pMesh = CreateMesh(pContext, vertices, indicesData);
@@ -480,7 +489,6 @@ std::vector<float> Model::LoadFloatData(const tinygltf::BufferView& bufferView, 
 	}
 
 	size_t dataOffset = bufferView.byteOffset + accessor.byteOffset;
-	size_t dataLength = sizeof(float) * numPerVert * accessor.count;
 
 	std::vector<float> floatVector;
 	floatVector.resize(numPerVert * accessor.count);

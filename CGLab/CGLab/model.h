@@ -6,7 +6,7 @@ struct Mesh
 	ID3D11Buffer* pVertexBuffer = nullptr;
 	ID3D11Buffer* pIndexBuffer = nullptr;
 	UINT indexCount = 0;
-	DirectX::XMMATRIX modelMatrix;
+	DirectX::XMMATRIX modelMatrix = DirectX::XMMatrixIdentity();
 
 	~Mesh()
 	{

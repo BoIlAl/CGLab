@@ -50,8 +50,8 @@ SamplerState MeshTextureSampler     : register(s10);
 struct VSIn
 {
     float3 position : POSITION;
-    float4 color    : COLOR;
     float3 normal   : NORMAL;
+    float4 tangent  : TANGENT;
     float2 texCoord : TEXCOORD;
 };
 
@@ -59,9 +59,9 @@ struct VSIn
 struct VSOut
 {
     float4 position         : SV_POSITION;
-    float4 color            : COLOR;
     float4 worldPosition    : POSITION1;
     float3 worldNormal      : NORMAL;
+    float3 worldTangent     : TANGENT;
     float2 texCoord         : TEXCOORD;
 };
 
@@ -69,7 +69,7 @@ struct VSOut
 struct PSOut
 {
     float4 color    : SV_TARGET0;
-    float4 emissve  : SV_TARGET1;
+    float4 emissive  : SV_TARGET1;
 };
 
 
@@ -78,9 +78,13 @@ VSOut VS(VSIn input)
     VSOut output;
     output.worldPosition = mul(float4(input.position, 1.0f), modelMatrix);
     output.position = mul(output.worldPosition, vpMatrix);
-    output.color = input.color;
     output.worldNormal = normalize(mul(float4(input.normal, 0.0f), modelMatrix).xyz);
+    
+#if HAS_COLOR_TEXTURE
+    
+    output.worldTangent = normalize(mul(input.tangent, modelMatrix).xyz);
     output.texCoord = input.texCoord;
+#endif
     
     return output;
 }
@@ -173,14 +177,22 @@ PSOut PS(VSOut input)
 {
     float3 resultColor = float3(0.0f, 0.0f, 0.0f);
     
-#if HAS_COLOR_TEXTURE
-    float3 metalF0 = albedo * BaseColorTexture.Sample(MeshTextureSampler, input.texCoord).rgb;
-    float3 normal = -1.0f * NormalTexture.Sample(MeshTextureSampler, input.texCoord).rgb;
-    float2 rm = roughnessMetalness.rg * MetalicRoughnessTexture.Sample(MinMagMipLinearSampler, input.texCoord).gb;
-#else
-    float3 metalF0 = albedo;
     float3 normal = normalize(input.worldNormal);
+    float3 metalF0 = albedo;
     float2 rm = roughnessMetalness.rg;
+    
+#if HAS_COLOR_TEXTURE
+    metalF0 *= BaseColorTexture.Sample(MeshTextureSampler, input.texCoord).rgb;
+    
+    float3 n = NormalTexture.Sample(MeshTextureSampler, input.texCoord).rgb;
+    
+    float3 tangent = normalize(input.worldTangent);
+    float3 binormal = cross(normal, tangent);
+    
+    n = normalize(n * 2.0f - float3(1.0f, 1.0f, 1.0f));
+    normal = normalize(mul(n, float3x3(tangent, binormal, normal)));
+    
+    rm *= MetalicRoughnessTexture.Sample(MinMagMipLinearSampler, input.texCoord).gb;
 #endif
     
     float roughness = rm.r;
@@ -225,7 +237,7 @@ PSOut PS(VSOut input)
     
     PSOut output = (PSOut)0;
     output.color = float4(resultColor + ambient, 1.0f);
-    output.emissve = emissive;
+    output.emissive = emissive;
     
     return output;
 }

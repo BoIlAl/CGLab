@@ -325,7 +325,6 @@ HRESULT RendererContext::CreateSphereMesh(UINT16 latitudeBands, UINT16 longitude
 			float normalZ = sinPhi * sinTheta;
 
 			Vertex vs = { { normalX, normalY, normalZ },
-						  { 0.5f, 0.1f, 0.1f, 1.0f },
 						  { normalX, normalY, normalZ } };
 
 			vertices.push_back(vs);

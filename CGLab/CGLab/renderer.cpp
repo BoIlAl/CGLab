@@ -209,8 +209,8 @@ void Renderer::Release()
 	SafeRelease(m_pEnvironmentVShader);
 	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pDepthStencilState);
-	SafeRelease(m_pRasterizerState);
 	SafeRelease(m_pRasterizerStateFront);
+	SafeRelease(m_pRasterizerState);
 	SafeRelease(m_pEmissiveTextureRTV);
 	SafeRelease(m_pEmissiveTexture);
 	SafeRelease(m_pHDRTextureSRV);
@@ -387,17 +387,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_RASTERIZER_DESC rasterizerDesc = {};
-		rasterizerDesc.FillMode = D3D11_FILL_SOLID;
 		rasterizerDesc.CullMode = D3D11_CULL_FRONT;
-		rasterizerDesc.FrontCounterClockwise = false;
-		rasterizerDesc.DepthBias = 0;
-		rasterizerDesc.SlopeScaledDepthBias = 0.0f;
-		rasterizerDesc.DepthBiasClamp = 0.0f;
-		rasterizerDesc.DepthClipEnable = false;
-		rasterizerDesc.ScissorEnable = false;
-		rasterizerDesc.MultisampleEnable = false;
-		rasterizerDesc.AntialiasedLineEnable = false;
 
 		hr = pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerStateFront);
 	}
@@ -496,8 +486,8 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	{
 		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
 			CreateInputElementDesc("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0),
-			CreateInputElementDesc("COLOR", DXGI_FORMAT_R32G32B32A32_FLOAT, sizeof(DirectX::XMFLOAT3)),
-			CreateInputElementDesc("NORMAL", DXGI_FORMAT_R32G32B32_FLOAT, sizeof(DirectX::XMFLOAT3) + sizeof(DirectX::XMFLOAT4)),
+			CreateInputElementDesc("NORMAL", DXGI_FORMAT_R32G32B32_FLOAT, sizeof(DirectX::XMFLOAT3)),
+			CreateInputElementDesc("TANGENT", DXGI_FORMAT_R32G32B32A32_FLOAT, 2 * sizeof(DirectX::XMFLOAT3)),
 			CreateInputElementDesc("TEXCOORD", DXGI_FORMAT_R32G32_FLOAT, 2 * sizeof(DirectX::XMFLOAT3) + sizeof(DirectX::XMFLOAT4))
 		};
 
@@ -516,35 +506,35 @@ HRESULT Renderer::CreatePipelineStateObjects()
 HRESULT Renderer::CreateCubeResourses(Mesh*& cubeMesh)
 {
 	static constexpr Vertex vertices[] = {
-		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f },	{ 0.0f, -1.0f, 0.0f } },
-		{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
-		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, -1.0f, 0.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, -1.0f, 0.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, -1.0f, 0.0f } },
+		{ { -0.5f, -0.5f, -0.5f },	{ 0.0f, -1.0f, 0.0f } },
 
-		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f } },
 
-		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
-		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f } },
 
-		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
-		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, -0.5f, -0.5f },	{ -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ -1.0f, 0.0f, 0.0f } },
 
-		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
-		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f } },
 
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
-		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
-		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } }
+		{ { -0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, -1.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, -1.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, -1.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, -1.0f } }
 	};
 
 	static constexpr UINT16 indices[] = {
@@ -586,10 +576,10 @@ HRESULT Renderer::CreateCubeResourses(Mesh*& cubeMesh)
 HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 {
 	static constexpr Vertex vertices[] = {
-	{ { -0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
-	{ { -0.5f, 0.0f, 0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
-	{ { 0.5f, 0.0f, 0.5f },		{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
-	{ { 0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { -0.5f, 0.0f, -0.5f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { -0.5f, 0.0f, 0.5f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { 0.5f, 0.0f, 0.5f },		{ 0.0f, 1.0f, 0.0f } },
+	{ { 0.5f, 0.0f, -0.5f },	{ 0.0f, 1.0f, 0.0f } },
 	};
 
 	static constexpr UINT16 indices[] = {
@@ -835,7 +825,7 @@ void Renderer::RenderImGui()
 
 	static float bright = 10.0f;
 	static bool isNormal = false, isGeometry = false, isFresnel = false, isAll = true;
-	static float roughness = 0.1f, metalness = 0.1f, rgb[3] = { 1.0f, 0.71f, 0.29f };
+	static float roughness = 1.0f, metalness = 1.0f, rgb[3] = { 1.0f, 1.0f, 1.0f };
 	static int pbrMode = 0; // на самом деле UINT pbrMode
 
 	static auto updatePBRBuffer = [this]()->void
@@ -894,6 +884,7 @@ void Renderer::Render()
 	FLOAT width = s_near / tanf(s_fov / 2.0f);
 	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
 	m_projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
+	m_projMatrixRH = DirectX::XMMatrixPerspectiveRH(width, height, s_near, s_far);
 
 	pContext->ClearState();
 
@@ -994,6 +985,8 @@ void Renderer::RenderScene()
 
 	pContext->VSSetShader(m_pSceneColorTextureVShader, nullptr, 0);
 	pContext->PSSetShader(m_pSceneColorTexturePShader, nullptr, 0);
+
+	//DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrixRH() * m_projMatrixRH));
 
 	for (auto* pModel : m_models)
 	{

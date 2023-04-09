@@ -136,6 +136,7 @@ private:
 	UINT m_windowHeight;
 
 	DirectX::XMMATRIX m_projMatrix;
+	DirectX::XMMATRIX m_projMatrixRH;
 
 	size_t m_startTime;
 	size_t m_currentTime;
