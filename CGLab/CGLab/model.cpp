@@ -162,7 +162,10 @@ bool Model::Init(RendererContext* pContext, const tinygltf::Model& model, const 
 
 	if (SUCCEEDED(hr))
 	{
-		ParseNode(pContext, model, 0, initMatrix);
+		DirectX::XMMATRIX mat = DirectX::XMMatrixIdentity();
+		mat.r[0].m128_f32[0] = -mat.r[0].m128_f32[0];
+
+		ParseNode(pContext, model, 0, mat * initMatrix);
 	}
 
 	std::free(m_pModelData);
@@ -396,9 +399,9 @@ HRESULT Model::LoadMesh(
 	{
 		Vertex& vertex = vertices[i];
 
-		vertex.position = { -positionData[3 * i + 0], positionData[3 * i + 1], positionData[3 * i + 2] };
-		vertex.normal = { -normalData[3 * i + 0], normalData[3 * i + 1], normalData[3 * i + 2] };
-		vertex.tangent = { -tangentData[4 * i + 0], tangentData[4 * i + 1], tangentData[4 * i + 2], tangentData[4 * i + 3] };
+		vertex.position = { positionData[3 * i + 0], positionData[3 * i + 1], positionData[3 * i + 2] };
+		vertex.normal = { normalData[3 * i + 0], normalData[3 * i + 1], normalData[3 * i + 2] };
+		vertex.tangent = { tangentData[4 * i + 0], tangentData[4 * i + 1], tangentData[4 * i + 2], tangentData[4 * i + 3] };
 		vertex.texCoord = { texCoordData[2 * i + 0], texCoordData[2 * i + 1] };
 	}
 

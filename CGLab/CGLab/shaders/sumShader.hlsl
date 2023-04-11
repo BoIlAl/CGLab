@@ -1,5 +1,5 @@
-Texture2D HDRTexture : register(t0);
-Texture2D BloomTexture: register(t1);
+Texture2D BloomTexture: register(t0);
+SamplerState MinMagLinearSampler : register(s0);
 
 struct VSIn
 {
@@ -27,8 +27,5 @@ VSOut VS(VSIn input)
 
 float4 PS(VSOut input) : SV_TARGET
 { 
-    float3 colorHDR = HDRTexture.Load(int3(input.position.xy, 0)).rgb;
-    float3 colorBloom = BloomTexture.Load(int3(input.position.xy, 0)).rgb;
-   
-    return float4(colorHDR + colorBloom, 1.0f);
+    return float4(BloomTexture.Sample(MinMagLinearSampler, input.texCoord).rgb, 1.0f);
 }

@@ -237,7 +237,7 @@ PSOut PS(VSOut input)
     
     PSOut output = (PSOut)0;
     output.color = float4(resultColor + ambient, 1.0f);
-    output.emissive = emissive * 5.0f;
+    output.emissive = emissive;
     
     return output;
 }

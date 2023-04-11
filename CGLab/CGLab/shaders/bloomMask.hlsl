@@ -1,13 +1,15 @@
-Texture2D SrcTexture : register(t0);
+static const float3 RGB_C = { 0.2126f, 0.7151f, 0.0722f };
 
+Texture2D SrcTexture : register(t0);
 Texture2D EmmisiveTexture : register(t1);
 
-cbuffer BrightnessThresholdBuffer : register(b0)
+SamplerState MinMagLinearSampler : register(s0);
+
+cbuffer BloomConstantBuffer : register(b0)
 {
-    float4 brightnessThreshold; //r
+    float4 pixelSizeThreshold; // rg - pixel size, b - brightness threshold
 }
 
-static const float3 RGB_C = { 0.2126f, 0.7151f, 0.0722f };
 
 struct VSIn
 {
@@ -37,16 +39,18 @@ VSOut VS(VSIn input)
 
 float4 PS(VSOut input) : SV_TARGET
 {
-    float3 color = SrcTexture.Load(int3(input.position.xy, 0)).rgb;
+    float4 emissive = EmmisiveTexture.Sample(MinMagLinearSampler, input.texCoord);
+    float3 color = SrcTexture.Sample(MinMagLinearSampler, input.texCoord).rgb;
     
-    float4 emissive = EmmisiveTexture.Load(int3(input.position.xy, 0));
-    
-    if (any(emissive != float4(0.0f, 0.0f, 0.0f, 0.0f)))
+    if (any(emissive.rgb != float3(0.0f, 0.0f, 0.0f)))
     {
+        emissive.rgb += color;
+        emissive.rgb *= 3.0f;
         return emissive;
     }
     
-    if (dot(color, RGB_C) > brightnessThreshold.r)
+    
+    if (dot(color, RGB_C) > pixelSizeThreshold.b)
     {
         return float4(color, 1.0f);
     }

@@ -706,7 +706,7 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
-		m_pBloom = Bloom::Create(m_pContext);
+		m_pBloom = Bloom::Create(m_pContext, m_windowWidth, m_windowHeight);
 
 		if (m_pBloom == nullptr)
 		{
@@ -780,9 +780,12 @@ bool Renderer::Resize(UINT newWidth, UINT newHeight)
 	SafeRelease(m_pBackBufferRTV);
 	SafeRelease(m_pDepthTextureDSV);
 	SafeRelease(m_pDepthTexture);
-	SafeRelease(m_pHDRRenderTarget);
 	SafeRelease(m_pHDRTextureRTV);
 	SafeRelease(m_pHDRTextureSRV);
+	SafeRelease(m_pHDRRenderTarget);
+	SafeRelease(m_pEmissiveTextureRTV);
+	SafeRelease(m_pEmissiveTextureSRV);
+	SafeRelease(m_pEmissiveTexture);
 
 	HRESULT hr = m_pSwapChain->ResizeBuffers(s_swapChainBuffersNum, newWidth, newHeight, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 0);
 
@@ -792,6 +795,11 @@ bool Renderer::Resize(UINT newWidth, UINT newHeight)
 		m_windowHeight = newHeight;
 
 		hr = CreateBackBuffer();
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pBloom->Resize(newWidth, newHeight);
 	}
 
 	return SUCCEEDED(hr);
@@ -1006,8 +1014,6 @@ void Renderer::RenderScene()
 	pContext->VSSetShader(m_pSceneColorTextureVShader, nullptr, 0);
 	pContext->PSSetShader(m_pSceneColorTexturePShader, nullptr, 0);
 
-	//DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrixRH() * m_projMatrixRH));
-
 	for (auto* pModel : m_models)
 	{
 		for (UINT primitiveIdx = 0; primitiveIdx < pModel->PrimitiveNum(); ++primitiveIdx)
@@ -1076,21 +1082,10 @@ void Renderer::PostProcessing()
 {
 	m_pContext->BeginEvent(L"Post Processing");
 
-	ID3D11Texture2D* pBloomTexture = nullptr;
-	ID3D11ShaderResourceView* pBloomTextureSRV = nullptr;
-	m_pBloom->CalculateBloom(
-		m_pHDRTextureSRV, 
-		m_pEmissiveTextureSRV, 
-		m_windowWidth, 
-		m_windowHeight, 
-		&pBloomTexture, 
-		&pBloomTextureSRV
-	);
+	m_pBloom->CalculateBloom(m_pHDRTextureSRV, m_pEmissiveTextureSRV, m_pHDRTextureRTV);
 
-	m_pToneMapping->ToneMap(pBloomTextureSRV, m_pBackBufferRTV, m_windowWidth, m_windowHeight, m_timeFromLastFrame / 10e6f);
+	m_pToneMapping->ToneMap(m_pHDRTextureSRV, m_pBackBufferRTV, m_windowWidth, m_windowHeight, m_timeFromLastFrame / 10e6f);
 
-	SafeRelease(pBloomTexture);
-	SafeRelease(pBloomTextureSRV);
 	m_pContext->EndEvent();
 }
 

@@ -1,11 +1,13 @@
-Texture2D HDRTexture : register(t0);
+static const float weight1D[5] = { 0.447892, 0.238827, 0.035753, 0.001459, 0.000016 };
 
+Texture2D HDRTexture : register(t0);
 SamplerState NoMipSampler : register(s0);
 
-cbuffer ImageSizeBuffer : register(b0)
+cbuffer BloomConstantBuffer : register(b0)
 {
-    float4 imageSize; //x - w, y - h
+    float4 pixelSizeThreshold; // rg - pixel size, b - brightness threshold
 }
+
 
 struct VSIn
 {
@@ -18,7 +20,6 @@ struct VSOut
     float2 texCoord : TEXCOORD;
 };
 
-static const float weight1D[5] = { 0.447892, 0.238827, 0.035753, 0.001459, 0.000016 };
 
 VSOut VS(VSIn input)
 {
@@ -36,12 +37,13 @@ VSOut VS(VSIn input)
 float4 PS(VSOut input) : SV_TARGET 
 { 
 #if GAUSS_BLUR_SEPARATED_VERTICAL
-    float uvOffset = 1.0 / imageSize.y;
+    float uvOffset = pixelSizeThreshold.g;
 #else
-    float uvOffset = 1.0 / imageSize.x;
+    float uvOffset = pixelSizeThreshold.r;
 #endif
     
-    float4 result = float4(0,0,0,0);
+    float4 result = float4(0.0f ,0.0f , 0.0f, 0.0f);
+    
     for (int i = -4; i <= 4; i++)
     {
 #if GAUSS_BLUR_SEPARATED_VERTICAL
@@ -51,5 +53,6 @@ float4 PS(VSOut input) : SV_TARGET
 #endif
         result += weight1D[abs(i)] * HDRTexture.Sample(NoMipSampler, uv); 
     } 
+    
     return result; 
 } 

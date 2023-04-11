@@ -6,80 +6,31 @@
 class Bloom
 {
 public:
-	static Bloom* Create(RendererContext* pContext);
+	static Bloom* Create(RendererContext* pContext, UINT targetWidth, UINT targetHeight);
 
-	HRESULT CalculateBloom(
+	HRESULT Resize(UINT newTargetWidth, UINT newTargetHeight);
+
+	void CalculateBloom(
 		ID3D11ShaderResourceView* pHDRTextureSRV,
 		ID3D11ShaderResourceView* pEmissiveSRV,
-		UINT renderTargetWidth,
-		UINT renderTargetHeight,
-		ID3D11Texture2D** ppBloom,
-		ID3D11ShaderResourceView** ppBloomSRV
+		ID3D11RenderTargetView* pTargetTextureRTV
 	);
 
 	~Bloom();
 
 private:
-	Bloom(RendererContext* pContext);
+	Bloom(RendererContext* pContext, UINT targetWidth, UINT targetHeight);
 
 	HRESULT CreatePipelineStateObjects();
 	HRESULT CreateResources();
 
-	HRESULT CalculateBloomMask(
-		ID3D11ShaderResourceView* pHDRTextureSRV,
-		ID3D11ShaderResourceView* pEmissiveSRV,
-		UINT renderTargetWidth,
-		UINT renderTargetHeight,
-		ID3D11Texture2D** ppBloomMask,
-		ID3D11ShaderResourceView** ppBloomMaskSRV
-	);
+	HRESULT UpdatePingPongTextures();
 
-	void RenderBloomMask(
-		ID3D11ShaderResourceView* pHDRTextureSRV,
-		ID3D11ShaderResourceView* pEmissiveSRV,
-		ID3D11RenderTargetView* pBloomMaskRTV,
-		UINT renderTargetWidth,
-		UINT renderTargetHeight
-	);
+	void ReleasePingPongResources();
 
-	void RenderBloom(
-		ID3D11ShaderResourceView* pHDRTextureSRV,
-		ID3D11ShaderResourceView* pBloomMaskSRV,
-		ID3D11RenderTargetView* pBloomRTV,
-		UINT renderTargetWidth,
-		UINT renderTargetHeight
-	);
-
-
-	HRESULT GaussBlurVertical(
-		ID3D11ShaderResourceView* pBloomMaskSRV,
-		UINT renderTargetWidth,
-		UINT renderTargetHeight,
-		ID3D11Texture2D** ppBlurResult,
-		ID3D11ShaderResourceView** ppBlurResultSRV
-		);
-
-	HRESULT GaussBlurHorizontal(
-		ID3D11ShaderResourceView* pBloomMaskSRV,
-		UINT renderTargetWidth,
-		UINT renderTargetHeight,
-		ID3D11Texture2D** ppBlurResult,
-		ID3D11ShaderResourceView** ppBlurResultSRV
-	);
-
-	void RenderBlurVertical(
-		ID3D11ShaderResourceView* pBloomMaskSRV,
-		ID3D11RenderTargetView* pBlurResultRTV,
-		UINT renderTargetWidth,
-		UINT renderTargetHeight
-	);
-
-	void RenderBlurHorizontal(
-		ID3D11ShaderResourceView* pBloomMaskSRV,
-		ID3D11RenderTargetView* pBlurResultRTV,
-		UINT renderTargetWidth,
-		UINT renderTargetHeight
-	);
+	void RenderBloomMask(ID3D11ShaderResourceView* pHDRTextureSRV, ID3D11ShaderResourceView* pEmissiveSRV);
+	void Blur();
+	void AddBloom(ID3D11RenderTargetView* pTargetRTV);
 
 private:
 	static constexpr float m_brightnessThreshold = 1.3f;
@@ -87,12 +38,13 @@ private:
 
 	RendererContext* m_pContext;
 
-	ID3D11Buffer* m_pBrightnessThresholdBuffer;
-	ID3D11Buffer* m_pTextureSizeBuffer;
+	UINT m_width;
+	UINT m_height;
+	UINT m_blurTextureWidth;
+	UINT m_blurTextureHeight;
 
 	ID3D11RasterizerState* m_pRasterizerState;
-
-	ID3D11SamplerState* m_pMinMagMipPointSampler;
+	ID3D11BlendState* m_pBlendState;
 
 	ID3D11PixelShader* m_pBloomMaskPS;
 	ID3D11VertexShader* m_pBloomMaskVS;
@@ -105,4 +57,12 @@ private:
 	ID3D11PixelShader* m_pBloomPS;
 	ID3D11VertexShader* m_pBloomVS;
 
+	ID3D11Buffer* m_pBloomConstantBuffer;
+
+	ID3D11SamplerState* m_pMinMagMipPointSampler;
+	ID3D11SamplerState* m_pMinMagLinearSampler;
+
+	ID3D11Texture2D* m_pingPongBlurTextures[2] = { nullptr, nullptr };
+	ID3D11ShaderResourceView* m_pingPongBlurTexturesSRV[2] = { nullptr, nullptr };
+	ID3D11RenderTargetView* m_pingPongBlurTexturesRTV[2] = { nullptr, nullptr };
 };

@@ -1,18 +1,15 @@
 #include "bloom.h"
 
-struct BrightnessThresholdBuffer
+
+struct BloomConstantBuffer
 {
-	DirectX::XMFLOAT4 brightnessThreshold;
+	DirectX::XMFLOAT4 pixelSizeThreshold;
 };
 
-struct TextureSizeBuffer
-{
-	DirectX::XMFLOAT4 textureSize;
-};
 
-Bloom* Bloom::Create(RendererContext* pContext)
+Bloom* Bloom::Create(RendererContext* pContext, UINT targetWidth, UINT targetHeight)
 {
-	Bloom* pBloom = new Bloom(pContext);
+	Bloom* pBloom = new Bloom(pContext, targetWidth, targetHeight);
 
 	HRESULT hr = pBloom->CreatePipelineStateObjects();
 
@@ -32,10 +29,13 @@ Bloom* Bloom::Create(RendererContext* pContext)
 
 Bloom::~Bloom()
 {
-	SafeRelease(m_pBrightnessThresholdBuffer);
-	SafeRelease(m_pTextureSizeBuffer);
-	SafeRelease(m_pRasterizerState);
+	ReleasePingPongResources();
+
+	SafeRelease(m_pMinMagLinearSampler);
 	SafeRelease(m_pMinMagMipPointSampler);
+	SafeRelease(m_pBloomConstantBuffer);
+	SafeRelease(m_pBlendState);
+	SafeRelease(m_pRasterizerState);
 	SafeRelease(m_pBloomMaskPS);
 	SafeRelease(m_pBloomMaskVS);
 	SafeRelease(m_pGaussBlurVerticalPS);
@@ -46,12 +46,14 @@ Bloom::~Bloom()
 	SafeRelease(m_pBloomVS);
 }
 
-Bloom::Bloom(RendererContext* pContext)
+Bloom::Bloom(RendererContext* pContext, UINT targetWidth, UINT targetHeight)
 	: m_pContext(pContext)
-	, m_pBrightnessThresholdBuffer(nullptr)
-	, m_pTextureSizeBuffer(nullptr)
+	, m_width(targetWidth)
+	, m_height(targetHeight)
+	, m_blurTextureWidth(targetWidth / 2)
+	, m_blurTextureHeight(targetHeight / 2)
 	, m_pRasterizerState(nullptr)
-	, m_pMinMagMipPointSampler(nullptr)
+	, m_pBlendState(nullptr)
 	, m_pBloomMaskPS(nullptr)
 	, m_pBloomMaskVS(nullptr)
 	, m_pGaussBlurVerticalPS(nullptr)
@@ -60,6 +62,9 @@ Bloom::Bloom(RendererContext* pContext)
 	, m_pGaussBlurHorizontalVS(nullptr)
 	, m_pBloomPS(nullptr)
 	, m_pBloomVS(nullptr)
+	, m_pBloomConstantBuffer(nullptr)
+	, m_pMinMagMipPointSampler(nullptr)
+	, m_pMinMagLinearSampler(nullptr)
 {
 }
 
@@ -78,6 +83,23 @@ HRESULT Bloom::CreatePipelineStateObjects()
 	rasterizerDesc.AntialiasedLineEnable = false;
 
 	HRESULT hr = m_pContext->GetDevice()->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerState);
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BLEND_DESC blendDesc = {};
+		blendDesc.AlphaToCoverageEnable = false;
+		blendDesc.IndependentBlendEnable = false;
+		blendDesc.RenderTarget[0].BlendEnable = true;
+		blendDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+		blendDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+		blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_ONE;
+		blendDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+		blendDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_SRC_ALPHA;
+		blendDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+
+		hr = m_pContext->GetDevice()->CreateBlendState(&blendDesc, &m_pBlendState);
+	}
 
 	ID3DBlob* pBlob = nullptr;
 
@@ -146,8 +168,14 @@ HRESULT Bloom::CreatePipelineStateObjects()
 		samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
 		hr = m_pContext->GetDevice()->CreateSamplerState(&samplerDesc, &m_pMinMagMipPointSampler);
-	}
 
+		if (SUCCEEDED(hr))
+		{
+			samplerDesc.Filter = D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+
+			hr = m_pContext->GetDevice()->CreateSamplerState(&samplerDesc, &m_pMinMagLinearSampler);
+		}
+	}
 
 	return hr;
 }
@@ -155,218 +183,113 @@ HRESULT Bloom::CreatePipelineStateObjects()
 HRESULT Bloom::CreateResources()
 {
 	ID3D11Device* pDevice = m_pContext->GetDevice();
-	ID3D11DeviceContext* pContext = m_pContext->GetContext();
 
-	D3D11_BUFFER_DESC brighnessThresholdBufferDesc = CreateDefaultBufferDesc(sizeof(BrightnessThresholdBuffer), D3D11_BIND_CONSTANT_BUFFER);
+	D3D11_BUFFER_DESC brighnessThresholdBufferDesc = CreateDefaultBufferDesc(sizeof(BloomConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
 
-	auto brightnessThreshold = DirectX::FXMVECTOR({ m_brightnessThreshold, 0, 0, 0 });
+	BloomConstantBuffer bloomConstBuffer = {};
+	bloomConstBuffer.pixelSizeThreshold = { 1.0f / m_blurTextureWidth, 1.0f / m_blurTextureHeight, m_brightnessThreshold, 0.0f };
 
-	D3D11_SUBRESOURCE_DATA constBufferData = CreateDefaultSubresourceData(&brightnessThreshold);
+	D3D11_SUBRESOURCE_DATA constBufferData = CreateDefaultSubresourceData(&bloomConstBuffer);
 
-	HRESULT hr = pDevice->CreateBuffer(&brighnessThresholdBufferDesc, &constBufferData, &m_pBrightnessThresholdBuffer);
+	HRESULT hr = pDevice->CreateBuffer(&brighnessThresholdBufferDesc, &constBufferData, &m_pBloomConstantBuffer);
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_BUFFER_DESC textureSizeDesc = CreateDefaultBufferDesc(sizeof(TextureSizeBuffer), D3D11_BIND_CONSTANT_BUFFER);
-		hr = pDevice->CreateBuffer(&textureSizeDesc, nullptr, &m_pTextureSizeBuffer);
+		hr = UpdatePingPongTextures();
 	}
 
 	return hr;
 }
 
-HRESULT Bloom::CalculateBloom(
-	ID3D11ShaderResourceView* pHDRTextureSRV,
-	ID3D11ShaderResourceView* pEmissiveSRV,
-	UINT renderTargetWidth,
-	UINT renderTargetHeight,
-	ID3D11Texture2D** ppBloom,
-	ID3D11ShaderResourceView** ppBloomSRV
-)
+HRESULT Bloom::UpdatePingPongTextures()
 {
-	ID3D11DeviceContext* pContext = m_pContext->GetContext();
 	ID3D11Device* pDevice = m_pContext->GetDevice();
-	ID3D11Texture2D* pBloomMask;
-	ID3D11ShaderResourceView* pBloomMaskSRV;
 
-	HRESULT hr = CalculateBloomMask(
-		pHDRTextureSRV,
-		pEmissiveSRV,
-		renderTargetWidth,
-		renderTargetHeight,
-		&pBloomMask,
-		&pBloomMaskSRV
+	HRESULT hr = S_OK;
+
+	D3D11_TEXTURE2D_DESC textureDesc = CreateDefaultTexture2DDesc(
+		DXGI_FORMAT_R32G32B32A32_FLOAT,
+		m_blurTextureWidth, m_blurTextureHeight,
+		D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET
 	);
 
-	if (SUCCEEDED(hr))
+	for (UINT i = 0; i < _countof(m_pingPongBlurTextures) && SUCCEEDED(hr); ++i)
 	{
-		m_pContext->BeginEvent(L"Blur");
-		for (size_t i = 0; i < m_blurSteps; ++i)
+		hr = pDevice->CreateTexture2D(&textureDesc, nullptr, &m_pingPongBlurTextures[i]);
+
+		if (SUCCEEDED(hr))
 		{
-			ID3D11Texture2D* pBlurResult = nullptr;
-			ID3D11ShaderResourceView* pBlurResultSRV = nullptr;
-			if (SUCCEEDED(hr))
-			{
-				hr = GaussBlurVertical(
-					pBloomMaskSRV,
-					renderTargetWidth,
-					renderTargetHeight,
-					&pBlurResult,
-					&pBlurResultSRV
-				);
-			}
-			SafeRelease(pBloomMask);
-			SafeRelease(pBloomMaskSRV);
-			pBloomMask = pBlurResult;
-			pBloomMaskSRV = pBlurResultSRV;
-
-			if (SUCCEEDED(hr))
-			{
-				hr = GaussBlurHorizontal(
-					pBloomMaskSRV,
-					renderTargetWidth,
-					renderTargetHeight,
-					&pBlurResult,
-					&pBlurResultSRV
-				);
-			}
-
-			SafeRelease(pBloomMask);
-			SafeRelease(pBloomMaskSRV);
-			pBloomMask = pBlurResult;
-			pBloomMaskSRV = pBlurResultSRV;
+			hr = pDevice->CreateShaderResourceView(m_pingPongBlurTextures[i], nullptr, &m_pingPongBlurTexturesSRV[i]);
 		}
-		m_pContext->EndEvent();
-	}
 
-
-	ID3D11RenderTargetView* pBloomRTV = nullptr;
-
-	if (SUCCEEDED(hr))
-	{
-		D3D11_TEXTURE2D_DESC bloomDesc = {};
-		bloomDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-		bloomDesc.Width = renderTargetWidth;
-		bloomDesc.Height = renderTargetHeight;
-		bloomDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-		bloomDesc.Usage = D3D11_USAGE_DEFAULT;
-		bloomDesc.CPUAccessFlags = 0;
-		bloomDesc.ArraySize = 1;
-		bloomDesc.MipLevels = 1;
-		bloomDesc.SampleDesc.Count = 1;
-		bloomDesc.SampleDesc.Quality = 0;
-
-
-		hr = pDevice->CreateTexture2D(&bloomDesc, nullptr, ppBloom);
-	}
-	
-
-	if (SUCCEEDED(hr))
-	{
-		hr = pDevice->CreateRenderTargetView(*ppBloom, nullptr, &pBloomRTV);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		RenderBloom(
-			pHDRTextureSRV,
-			pBloomMaskSRV,
-			pBloomRTV,
-			renderTargetWidth,
-			renderTargetHeight
-		);
-
-		if (ppBloomSRV != nullptr)
+		if (SUCCEEDED(hr))
 		{
-			hr = pDevice->CreateShaderResourceView(*ppBloom, nullptr, ppBloomSRV);
+			hr = pDevice->CreateRenderTargetView(m_pingPongBlurTextures[i], nullptr, &m_pingPongBlurTexturesRTV[i]);
 		}
 	}
-
-	SafeRelease(pBloomRTV);
-	SafeRelease(pBloomMask);
-	SafeRelease(pBloomMaskSRV);
 
 	return hr;
 }
 
-HRESULT Bloom::CalculateBloomMask(
-	ID3D11ShaderResourceView* pHDRTextureSRV,
-	ID3D11ShaderResourceView* pEmissiveSRV,
-	UINT renderTargetWidth,
-	UINT renderTargetHeight,
-	ID3D11Texture2D** ppBloomMask,
-	ID3D11ShaderResourceView** ppBloomMaskSRV
-)
+
+HRESULT Bloom::Resize(UINT newTargetWidth, UINT newTargetHeight)
 {
-	ID3D11Device* pDevice = m_pContext->GetDevice();
+	ReleasePingPongResources();
 
-	ID3D11RenderTargetView* pBloomMaskRTV = nullptr;
+	m_width = newTargetWidth;
+	m_height = newTargetHeight;
+	m_blurTextureWidth = m_width / 2;
+	m_blurTextureHeight = m_height / 2;
 
-	D3D11_TEXTURE2D_DESC bloomMaskDesc = {};
-	bloomMaskDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	bloomMaskDesc.Width = renderTargetWidth;
-	bloomMaskDesc.Height = renderTargetHeight;
-	bloomMaskDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-	bloomMaskDesc.Usage = D3D11_USAGE_DEFAULT;
-	bloomMaskDesc.CPUAccessFlags = 0;
-	bloomMaskDesc.ArraySize = 1;
-	bloomMaskDesc.MipLevels = 1;
-	bloomMaskDesc.SampleDesc.Count = 1;
-	bloomMaskDesc.SampleDesc.Quality = 0;
-
-
-	HRESULT hr = pDevice->CreateTexture2D(&bloomMaskDesc, nullptr, ppBloomMask); //
+	HRESULT hr = UpdatePingPongTextures();
 
 	if (SUCCEEDED(hr))
 	{
-		hr = pDevice->CreateRenderTargetView(*ppBloomMask, nullptr, &pBloomMaskRTV);
+		BloomConstantBuffer bloomConstBuffer = {};
+		bloomConstBuffer.pixelSizeThreshold = { 1.0f / m_blurTextureWidth, 1.0f / m_blurTextureHeight, m_brightnessThreshold, 0.0f };
+
+		m_pContext->GetContext()->UpdateSubresource(m_pBloomConstantBuffer, 0, nullptr, &bloomConstBuffer, 0, 0);
 	}
 
-	if (SUCCEEDED(hr))
-	{
-		RenderBloomMask(
-			pHDRTextureSRV, 
-			pEmissiveSRV, 
-			pBloomMaskRTV, 
-			renderTargetWidth, 
-			renderTargetHeight
-		);
-
-		if (ppBloomMaskSRV != nullptr)
-		{
-			hr = pDevice->CreateShaderResourceView(*ppBloomMask, nullptr, ppBloomMaskSRV);
-		}
-	}
-
-	SafeRelease(pBloomMaskRTV);
 	return hr;
 }
 
-void Bloom::RenderBloomMask(
+
+void Bloom::ReleasePingPongResources()
+{
+	for (UINT i = 0; i < 2; ++i)
+	{
+		SafeRelease(m_pingPongBlurTextures[i]);
+		SafeRelease(m_pingPongBlurTexturesSRV[i]);
+		SafeRelease(m_pingPongBlurTexturesRTV[i]);
+	}
+}
+
+
+void Bloom::CalculateBloom(
 	ID3D11ShaderResourceView* pHDRTextureSRV,
 	ID3D11ShaderResourceView* pEmissiveSRV,
-	ID3D11RenderTargetView* pBloomMaskRTV,
-	UINT renderTargetWidth,
-	UINT renderTargetHeight
+	ID3D11RenderTargetView* pTargetTextureRTV
 )
 {
+	m_pContext->BeginEvent(L"Bloom");
+
 	ID3D11DeviceContext* pContext = m_pContext->GetContext();
-	m_pContext->BeginEvent(L"Bloom Mask");
-
-	pContext->OMSetRenderTargets(1, &pBloomMaskRTV, nullptr);
+	pContext->ClearState();
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftY = 0;
 	viewport.TopLeftX = 0;
-	viewport.Width = (FLOAT)renderTargetWidth;
-	viewport.Height = (FLOAT)renderTargetHeight;
+	viewport.Width = (FLOAT)m_blurTextureWidth;
+	viewport.Height = (FLOAT)m_blurTextureHeight;
 	viewport.MinDepth = 0;
 	viewport.MaxDepth = 1;
 
 	D3D11_RECT rect = {};
 	rect.left = 0;
 	rect.top = 0;
-	rect.right = renderTargetWidth;
-	rect.bottom = renderTargetHeight;
+	rect.right = m_blurTextureWidth;
+	rect.bottom = m_blurTextureHeight;
 
 	pContext->RSSetViewports(1, &viewport);
 	pContext->RSSetScissorRects(1, &rect);
@@ -375,274 +298,108 @@ void Bloom::RenderBloomMask(
 
 	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	pContext->IASetInputLayout(nullptr);
+
+	pContext->PSSetConstantBuffers(0, 1, &m_pBloomConstantBuffer);
+
+	RenderBloomMask(pHDRTextureSRV, pEmissiveSRV);
+
+	pContext->OMSetRenderTargets(0, nullptr, nullptr);
+
+	Blur();
+
+	pContext->OMSetRenderTargets(0, nullptr, nullptr);
+
+	AddBloom(pTargetTextureRTV);
+
+	m_pContext->EndEvent();
+}
+
+void Bloom::RenderBloomMask(ID3D11ShaderResourceView* pHDRTextureSRV, ID3D11ShaderResourceView* pEmissiveSRV)
+{
+	m_pContext->BeginEvent(L"Bloom Mask");
+	
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
+	pContext->OMSetRenderTargets(1, &m_pingPongBlurTexturesRTV[0], nullptr);
 
 	pContext->VSSetShader(m_pBloomMaskVS, nullptr, 0);
 	pContext->PSSetShader(m_pBloomMaskPS, nullptr, 0);
 
 	ID3D11ShaderResourceView* SRVs[] = { pHDRTextureSRV, pEmissiveSRV };
-
 	pContext->PSSetShaderResources(0, _countof(SRVs), SRVs);
 
-	pContext->PSSetConstantBuffers(0, 1, &m_pBrightnessThresholdBuffer);
-	
+	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
+
 	pContext->Draw(4, 0);
 
 	m_pContext->EndEvent();
 }
 
-void Bloom::RenderBloom(
-	ID3D11ShaderResourceView* pHDRTextureSRV,
-	ID3D11ShaderResourceView* pBloomMaskSRV,
-	ID3D11RenderTargetView* pBloomRTV,
-	UINT renderTargetWidth,
-	UINT renderTargetHeight
-)
+void Bloom::Blur()
 {
-	ID3D11DeviceContext* pContext = m_pContext->GetContext();
-	m_pContext->BeginEvent(L"Bloom");
+	m_pContext->BeginEvent(L"Gauss Blur");
 
-	pContext->OMSetRenderTargets(1, &pBloomRTV, nullptr);
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
+	pContext->PSSetSamplers(0, 1, &m_pMinMagMipPointSampler);
+
+	auto applyBlur = [&](UINT dstIdx, ID3D11VertexShader* pVS, ID3D11PixelShader* pPS)
+	{
+		UINT srcIdx = (dstIdx + 1) & 0x01u;
+
+		pContext->PSSetShaderResources(0, 1, &m_pingPongBlurTexturesSRV[srcIdx]);
+		pContext->OMSetRenderTargets(1, &m_pingPongBlurTexturesRTV[dstIdx], nullptr);
+
+		pContext->VSSetShader(pVS, nullptr, 0);
+		pContext->PSSetShader(pPS, nullptr, 0);
+
+		pContext->Draw(4, 0);
+
+		pContext->OMSetRenderTargets(0, nullptr, nullptr);
+	};
+
+	for (UINT i = 0; i < m_blurSteps; ++i)
+	{
+		applyBlur(1, m_pGaussBlurHorizontalVS, m_pGaussBlurHorizontalPS);
+		applyBlur(0, m_pGaussBlurVerticalVS, m_pGaussBlurVerticalPS);
+	}
+
+	m_pContext->EndEvent();
+}
+
+void Bloom::AddBloom(ID3D11RenderTargetView* pTargetRTV)
+{
+	m_pContext->BeginEvent(L"Add Bloom");
+
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftY = 0;
 	viewport.TopLeftX = 0;
-	viewport.Width = (FLOAT)renderTargetWidth;
-	viewport.Height = (FLOAT)renderTargetHeight;
+	viewport.Width = (FLOAT)m_width;
+	viewport.Height = (FLOAT)m_height;
 	viewport.MinDepth = 0;
 	viewport.MaxDepth = 1;
 
 	D3D11_RECT rect = {};
 	rect.left = 0;
 	rect.top = 0;
-	rect.right = renderTargetWidth;
-	rect.bottom = renderTargetHeight;
+	rect.right = m_width;
+	rect.bottom = m_height;
 
 	pContext->RSSetViewports(1, &viewport);
 	pContext->RSSetScissorRects(1, &rect);
 
-	pContext->RSSetState(m_pRasterizerState);
-
-	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-	pContext->IASetInputLayout(nullptr);
+	pContext->OMSetRenderTargets(1, &pTargetRTV, nullptr);
+	pContext->OMSetBlendState(m_pBlendState, nullptr, 0xffffffff);
 
 	pContext->VSSetShader(m_pBloomVS, nullptr, 0);
 	pContext->PSSetShader(m_pBloomPS, nullptr, 0);
 
-	ID3D11ShaderResourceView* SRVs[] = { pHDRTextureSRV, pBloomMaskSRV };
-
-	pContext->PSSetShaderResources(0, _countof(SRVs), SRVs);
-
-	pContext->Draw(4, 0);
-
-	m_pContext->EndEvent();
-}
-
-HRESULT Bloom::GaussBlurVertical(
-	ID3D11ShaderResourceView* pBloomMaskSRV,
-	UINT renderTargetWidth,
-	UINT renderTargetHeight,
-	ID3D11Texture2D** ppBlurResult,
-	ID3D11ShaderResourceView** ppBlurResultSRV
-)
-{
-	ID3D11Device* pDevice = m_pContext->GetDevice();
-
-	ID3D11RenderTargetView* pBlurResultRTV = nullptr;
-
-	D3D11_TEXTURE2D_DESC bloomMaskDesc = {};
-	bloomMaskDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	bloomMaskDesc.Width = renderTargetWidth;
-	bloomMaskDesc.Height = renderTargetHeight;
-	bloomMaskDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-	bloomMaskDesc.Usage = D3D11_USAGE_DEFAULT;
-	bloomMaskDesc.CPUAccessFlags = 0;
-	bloomMaskDesc.ArraySize = 1;
-	bloomMaskDesc.MipLevels = 1;
-	bloomMaskDesc.SampleDesc.Count = 1;
-	bloomMaskDesc.SampleDesc.Quality = 0;
-
-
-	HRESULT hr = pDevice->CreateTexture2D(&bloomMaskDesc, nullptr, ppBlurResult); //
-
-	if (SUCCEEDED(hr))
-	{
-		hr = pDevice->CreateRenderTargetView(*ppBlurResult, nullptr, &pBlurResultRTV);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		RenderBlurVertical(
-			pBloomMaskSRV,
-			pBlurResultRTV,
-			renderTargetWidth,
-			renderTargetHeight
-		);
-
-		if (ppBlurResultSRV != nullptr)
-		{
-			hr = pDevice->CreateShaderResourceView(*ppBlurResult, nullptr, ppBlurResultSRV);
-		}
-	}
-
-	SafeRelease(pBlurResultRTV);
-	return hr;
-}
-
-void Bloom::RenderBlurVertical(
-	ID3D11ShaderResourceView* pBloomMaskSRV,
-	ID3D11RenderTargetView* pBlurResultRTV,
-	UINT renderTargetWidth,
-	UINT renderTargetHeight
-)
-{
-	ID3D11DeviceContext* pContext = m_pContext->GetContext();
-	m_pContext->BeginEvent(L"Blur Vertical");
-
-	pContext->OMSetRenderTargets(1, &pBlurResultRTV, nullptr);
-
-	D3D11_VIEWPORT viewport = {};
-	viewport.TopLeftY = 0;
-	viewport.TopLeftX = 0;
-	viewport.Width = (FLOAT)renderTargetWidth;
-	viewport.Height = (FLOAT)renderTargetHeight;
-	viewport.MinDepth = 0;
-	viewport.MaxDepth = 1;
-
-	D3D11_RECT rect = {};
-	rect.left = 0;
-	rect.top = 0;
-	rect.right = renderTargetWidth;
-	rect.bottom = renderTargetHeight;
-
-	pContext->RSSetViewports(1, &viewport);
-	pContext->RSSetScissorRects(1, &rect);
-
-	pContext->RSSetState(m_pRasterizerState);
-
-	pContext->PSSetSamplers(0, 1, &m_pMinMagMipPointSampler);
-
-	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-	pContext->IASetInputLayout(nullptr);
-
-	pContext->VSSetShader(m_pGaussBlurVerticalVS, nullptr, 0);
-	pContext->PSSetShader(m_pGaussBlurVerticalPS, nullptr, 0);
-
-	pContext->PSSetShaderResources(0, 1, &pBloomMaskSRV);
-
-	TextureSizeBuffer textureSizeBuffer = {};
-	DirectX::XMStoreFloat4(&textureSizeBuffer.textureSize, DirectX::FXMVECTOR({(FLOAT)renderTargetWidth, (FLOAT)renderTargetHeight, 0, 0 }));
-	pContext->UpdateSubresource(m_pTextureSizeBuffer, 0, nullptr, &textureSizeBuffer, 0, 0);
-
-
-	pContext->PSSetConstantBuffers(0, 1, &m_pTextureSizeBuffer);
+	pContext->PSSetShaderResources(0, 1, &m_pingPongBlurTexturesSRV[0]);
+	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
 
 	pContext->Draw(4, 0);
 
 	m_pContext->EndEvent();
 }
-
-
-HRESULT Bloom::GaussBlurHorizontal(
-	ID3D11ShaderResourceView* pBloomMaskSRV,
-	UINT renderTargetWidth,
-	UINT renderTargetHeight,
-	ID3D11Texture2D** ppBlurResult,
-	ID3D11ShaderResourceView** ppBlurResultSRV
-)
-{
-	ID3D11Device* pDevice = m_pContext->GetDevice();
-
-	ID3D11RenderTargetView* pBlurResultRTV = nullptr;
-
-	D3D11_TEXTURE2D_DESC bloomMaskDesc = {};
-	bloomMaskDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	bloomMaskDesc.Width = renderTargetWidth;
-	bloomMaskDesc.Height = renderTargetHeight;
-	bloomMaskDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
-	bloomMaskDesc.Usage = D3D11_USAGE_DEFAULT;
-	bloomMaskDesc.CPUAccessFlags = 0;
-	bloomMaskDesc.ArraySize = 1;
-	bloomMaskDesc.MipLevels = 1;
-	bloomMaskDesc.SampleDesc.Count = 1;
-	bloomMaskDesc.SampleDesc.Quality = 0;
-
-
-	HRESULT hr = pDevice->CreateTexture2D(&bloomMaskDesc, nullptr, ppBlurResult); //
-
-	if (SUCCEEDED(hr))
-	{
-		hr = pDevice->CreateRenderTargetView(*ppBlurResult, nullptr, &pBlurResultRTV);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		RenderBlurHorizontal(
-			pBloomMaskSRV,
-			pBlurResultRTV,
-			renderTargetWidth,
-			renderTargetHeight
-		);
-
-		if (ppBlurResultSRV != nullptr)
-		{
-			hr = pDevice->CreateShaderResourceView(*ppBlurResult, nullptr, ppBlurResultSRV);
-		}
-	}
-
-	SafeRelease(pBlurResultRTV);
-	return hr;
-}
-
-void Bloom::RenderBlurHorizontal(
-	ID3D11ShaderResourceView* pBloomMaskSRV,
-	ID3D11RenderTargetView* pBlurResultRTV,
-	UINT renderTargetWidth,
-	UINT renderTargetHeight
-)
-{
-	ID3D11DeviceContext* pContext = m_pContext->GetContext();
-	m_pContext->BeginEvent(L"Blur Horizontal");
-
-	pContext->OMSetRenderTargets(1, &pBlurResultRTV, nullptr);
-
-	D3D11_VIEWPORT viewport = {};
-	viewport.TopLeftY = 0;
-	viewport.TopLeftX = 0;
-	viewport.Width = (FLOAT)renderTargetWidth;
-	viewport.Height = (FLOAT)renderTargetHeight;
-	viewport.MinDepth = 0;
-	viewport.MaxDepth = 1;
-
-	D3D11_RECT rect = {};
-	rect.left = 0;
-	rect.top = 0;
-	rect.right = renderTargetWidth;
-	rect.bottom = renderTargetHeight;
-
-	pContext->RSSetViewports(1, &viewport);
-	pContext->RSSetScissorRects(1, &rect);
-
-	pContext->RSSetState(m_pRasterizerState);
-
-	pContext->PSSetSamplers(0, 1, &m_pMinMagMipPointSampler);
-
-	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-	pContext->IASetInputLayout(nullptr);
-
-	pContext->VSSetShader(m_pGaussBlurHorizontalVS, nullptr, 0);
-	pContext->PSSetShader(m_pGaussBlurHorizontalPS, nullptr, 0);
-
-	pContext->PSSetShaderResources(0, 1, &pBloomMaskSRV);
-
-	TextureSizeBuffer textureSizeBuffer = {};
-	DirectX::XMStoreFloat4(&textureSizeBuffer.textureSize, DirectX::FXMVECTOR({ (FLOAT)renderTargetWidth, (FLOAT)renderTargetHeight, 0, 0 }));
-	pContext->UpdateSubresource(m_pTextureSizeBuffer, 0, nullptr, &textureSizeBuffer, 0, 0);
-
-
-	pContext->PSSetConstantBuffers(0, 1, &m_pTextureSizeBuffer);
-
-	pContext->Draw(4, 0);
-
-	m_pContext->EndEvent();
-}
-
