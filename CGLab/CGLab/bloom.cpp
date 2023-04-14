@@ -106,10 +106,11 @@ HRESULT Bloom::CreatePipelineStateObjects()
 	if (SUCCEEDED(hr))
 	{
 		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
-			"shaders/bloomMask.hlsl",
+			"shaders/bloom.hlsl",
 			&m_pBloomMaskVS,
 			&pBlob,
-			&m_pBloomMaskPS
+			&m_pBloomMaskPS,
+			"BLOOM_MASK=1"
 		))
 		{
 			hr = E_FAIL;
@@ -119,7 +120,7 @@ HRESULT Bloom::CreatePipelineStateObjects()
 	if (SUCCEEDED(hr))
 	{
 		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
-			"shaders/gaussBlur.hlsl",
+			"shaders/bloom.hlsl",
 			&m_pGaussBlurVerticalVS,
 			&pBlob,
 			&m_pGaussBlurVerticalPS,
@@ -133,10 +134,11 @@ HRESULT Bloom::CreatePipelineStateObjects()
 	if (SUCCEEDED(hr))
 	{
 		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
-			"shaders/gaussBlur.hlsl",
+			"shaders/bloom.hlsl",
 			&m_pGaussBlurHorizontalVS,
 			&pBlob,
-			&m_pGaussBlurHorizontalPS
+			&m_pGaussBlurHorizontalPS,
+			"GAUSS_BLUR_SEPARATED_HORIZONTAL=1"
 		))
 		{
 			hr = E_FAIL;
@@ -146,7 +148,7 @@ HRESULT Bloom::CreatePipelineStateObjects()
 	if (SUCCEEDED(hr))
 	{
 		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
-			"shaders/sumShader.hlsl",
+			"shaders/bloom.hlsl",
 			&m_pBloomVS,
 			&pBlob,
 			&m_pBloomPS
@@ -300,14 +302,12 @@ void Bloom::CalculateBloom(
 	pContext->IASetInputLayout(nullptr);
 
 	pContext->PSSetConstantBuffers(0, 1, &m_pBloomConstantBuffer);
+	ID3D11SamplerState* samplers[] = { m_pMinMagMipPointSampler, m_pMinMagLinearSampler };
+	pContext->PSSetSamplers(0, 2, samplers);
 
 	RenderBloomMask(pHDRTextureSRV, pEmissiveSRV);
 
-	pContext->OMSetRenderTargets(0, nullptr, nullptr);
-
 	Blur();
-
-	pContext->OMSetRenderTargets(0, nullptr, nullptr);
 
 	AddBloom(pTargetTextureRTV);
 
@@ -328,9 +328,9 @@ void Bloom::RenderBloomMask(ID3D11ShaderResourceView* pHDRTextureSRV, ID3D11Shad
 	ID3D11ShaderResourceView* SRVs[] = { pHDRTextureSRV, pEmissiveSRV };
 	pContext->PSSetShaderResources(0, _countof(SRVs), SRVs);
 
-	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
-
 	pContext->Draw(4, 0);
+
+	pContext->OMSetRenderTargets(0, nullptr, nullptr);
 
 	m_pContext->EndEvent();
 }
@@ -340,8 +340,6 @@ void Bloom::Blur()
 	m_pContext->BeginEvent(L"Gauss Blur");
 
 	ID3D11DeviceContext* pContext = m_pContext->GetContext();
-
-	pContext->PSSetSamplers(0, 1, &m_pMinMagMipPointSampler);
 
 	auto applyBlur = [&](UINT dstIdx, ID3D11VertexShader* pVS, ID3D11PixelShader* pPS)
 	{
@@ -363,6 +361,8 @@ void Bloom::Blur()
 		applyBlur(1, m_pGaussBlurHorizontalVS, m_pGaussBlurHorizontalPS);
 		applyBlur(0, m_pGaussBlurVerticalVS, m_pGaussBlurVerticalPS);
 	}
+
+	pContext->OMSetRenderTargets(0, nullptr, nullptr);
 
 	m_pContext->EndEvent();
 }
@@ -397,7 +397,6 @@ void Bloom::AddBloom(ID3D11RenderTargetView* pTargetRTV)
 	pContext->PSSetShader(m_pBloomPS, nullptr, 0);
 
 	pContext->PSSetShaderResources(0, 1, &m_pingPongBlurTexturesSRV[0]);
-	pContext->PSSetSamplers(0, 1, &m_pMinMagLinearSampler);
 
 	pContext->Draw(4, 0);
 

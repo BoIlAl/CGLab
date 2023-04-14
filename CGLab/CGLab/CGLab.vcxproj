@@ -204,17 +204,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\bloomMask.hlsl">
-      <FileType>Document</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="shaders\gaussBlur.hlsl">
-      <FileType>Document</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="shaders\sumShader.hlsl">
+    <None Include="shaders\bloom.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

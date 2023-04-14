@@ -33,7 +33,7 @@ private:
 	void AddBloom(ID3D11RenderTargetView* pTargetRTV);
 
 private:
-	static constexpr float m_brightnessThreshold = 1.3f;
+	static constexpr float m_brightnessThreshold = 2.0f;
 	static constexpr size_t m_blurSteps = 10;
 
 	RendererContext* m_pContext;
