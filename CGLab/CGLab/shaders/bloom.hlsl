@@ -2,9 +2,7 @@ static const float weight1D[5] = { 0.447892, 0.238827, 0.035753, 0.001459, 0.000
 static const float3 RGB_C = { 0.2126f, 0.7151f, 0.0722f };
 
 Texture2D SrcTexture: register(t0);
-#ifdef BLOOM_MASK
 Texture2D EmmisiveTexture : register(t1);
-#endif
 
 SamplerState NoMipSampler : register(s0);
 SamplerState MinMagLinearSampler : register(s1);
