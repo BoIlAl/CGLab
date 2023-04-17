@@ -22,6 +22,9 @@
     <Filter Include="Файлы заголовков\stb">
       <UniqueIdentifier>{3e1fbf1b-3bc7-46c6-a88d-24cf5df12a7a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Файлы заголовков\libs">
+      <UniqueIdentifier>{b36c864f-cd4b-4408-a1ff-b5f34a584b52}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -96,6 +99,18 @@
     <ClInclude Include="environment.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="libs\tiny_gltf.h">
+      <Filter>Файлы заголовков\libs</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\json.hpp">
+      <Filter>Файлы заголовков\libs</Filter>
+    </ClInclude>
+    <ClInclude Include="model.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="bloom.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CGLab.cpp">
@@ -152,6 +167,15 @@
     <ClCompile Include="environment.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="model.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="framework.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="bloom.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="CGLab.rc">
@@ -192,6 +216,9 @@
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\prefilteredColor.hlsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\bloom.hlsl">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

@@ -14,6 +14,8 @@
 #include "toneMapping.h"
 #include "camera.h"
 #include "app.h"
+#include "model.h"
+#include "bloom.h"
 
 #include "imGui/imgui_impl_dx11.h"
 #include "imGui/imgui_impl_win32.h"
@@ -73,17 +75,25 @@ Renderer::Renderer()
 	, m_pHDRRenderTarget(nullptr)
 	, m_pHDRTextureRTV(nullptr)
 	, m_pHDRTextureSRV(nullptr)
+	, m_pEmissiveTexture(nullptr)
+	, m_pEmissiveTextureRTV(nullptr)
+	, m_pEmissiveTextureSRV(nullptr)
 	, m_pRasterizerState(nullptr)
 	, m_pRasterizerStateFront(nullptr)
 	, m_pDepthStencilState(nullptr)
 	, m_pLightBuffer(nullptr)
-	, m_pVertexShader(nullptr)
-	, m_pPixelShader(nullptr)
+	, m_pSceneVShader(nullptr)
+	, m_pScenePShader(nullptr)
+	, m_pSceneColorTextureVShader(nullptr)
+	, m_pSceneColorTexturePShader(nullptr)
+	, m_pSceneColorEmissiveVShader(nullptr)
+	, m_pSceneColorEmissivePShader(nullptr)
 	, m_pEnvironmentVShader(nullptr)
 	, m_pEnvironmentPShader(nullptr)
 	, m_pInputLayout(nullptr)
 	, m_pConstantBuffer(nullptr)
 	, m_pMinMagMipLinearSampler(nullptr)
+	, m_MinMagMipLinearSamplerClamp(nullptr)
 	, m_pPBRDFTexture(nullptr)
 	, m_pPBRDFTextureSRV(nullptr)
 	, m_pEnvironment(nullptr)
@@ -97,6 +107,7 @@ Renderer::Renderer()
 	, m_timeFromLastFrame(0)
 	, m_pCamera(nullptr)
 	, m_pToneMapping(nullptr)
+	, m_pBloom(nullptr)
 {}
 
 Renderer::~Renderer()
@@ -138,6 +149,10 @@ bool Renderer::Init(HWND hWnd)
 		hr = CreateSceneResources();
 	}
 
+	if (SUCCEEDED(hr))
+	{
+		hr = LoadModels();
+	}
 
 	bool res = SUCCEEDED(hr);
 
@@ -185,16 +200,23 @@ void Renderer::Release()
 	SafeRelease(m_pPBRDFTexture);
 	SafeRelease(m_pPBRDFTextureSRV);
 	SafeRelease(m_pInputLayout);
-	SafeRelease(m_pPixelShader);
-	SafeRelease(m_pVertexShader);
+	SafeRelease(m_pSceneColorEmissivePShader);
+	SafeRelease(m_pSceneColorEmissiveVShader);
+	SafeRelease(m_pSceneColorTexturePShader);
+	SafeRelease(m_pSceneColorTextureVShader);
+	SafeRelease(m_pScenePShader);
+	SafeRelease(m_pSceneVShader);
 	SafeRelease(m_MinMagMipLinearSamplerClamp);
 	SafeRelease(m_pMinMagMipLinearSampler);
 	SafeRelease(m_pEnvironmentPShader);
 	SafeRelease(m_pEnvironmentVShader);
 	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pDepthStencilState);
-	SafeRelease(m_pRasterizerState);
 	SafeRelease(m_pRasterizerStateFront);
+	SafeRelease(m_pRasterizerState);
+	SafeRelease(m_pEmissiveTextureRTV);
+	SafeRelease(m_pEmissiveTextureSRV);
+	SafeRelease(m_pEmissiveTexture);
 	SafeRelease(m_pHDRTextureSRV);
 	SafeRelease(m_pHDRTextureRTV);
 	SafeRelease(m_pHDRRenderTarget);
@@ -207,11 +229,17 @@ void Renderer::Release()
 	delete m_pEnvironment;
 	delete m_pEnvironmentSphere;
 	delete m_pToneMapping;
+	delete m_pBloom;
 	delete m_pCamera;
 
 	for (auto& mesh : m_meshes)
 	{
 		delete mesh;
+	}
+
+	for (auto& model : m_models)
+	{
+		delete model;
 	}
 
 	ImGui_ImplDX11_Shutdown();
@@ -319,6 +347,33 @@ HRESULT Renderer::CreateBackBuffer()
 		hr = pDevice->CreateShaderResourceView(m_pHDRRenderTarget, nullptr, &m_pHDRTextureSRV);
 	}
 
+	if (SUCCEEDED(hr))
+	{
+		D3D11_TEXTURE2D_DESC emissiveTextureDesc = {};
+		emissiveTextureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		emissiveTextureDesc.Width = m_windowWidth;
+		emissiveTextureDesc.Height = m_windowHeight;
+		emissiveTextureDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+		emissiveTextureDesc.Usage = D3D11_USAGE_DEFAULT;
+		emissiveTextureDesc.CPUAccessFlags = 0;
+		emissiveTextureDesc.ArraySize = 1;
+		emissiveTextureDesc.MipLevels = 1;
+		emissiveTextureDesc.SampleDesc.Count = 1;
+		emissiveTextureDesc.SampleDesc.Quality = 0;
+
+		hr = pDevice->CreateTexture2D(&emissiveTextureDesc, nullptr, &m_pEmissiveTexture);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDevice->CreateRenderTargetView(m_pEmissiveTexture, nullptr, &m_pEmissiveTextureRTV);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = pDevice->CreateShaderResourceView(m_pEmissiveTexture, nullptr, &m_pEmissiveTextureSRV);
+	}
+
 	return hr;
 }
 
@@ -342,17 +397,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
-		D3D11_RASTERIZER_DESC rasterizerDesc = {};
-		rasterizerDesc.FillMode = D3D11_FILL_SOLID;
 		rasterizerDesc.CullMode = D3D11_CULL_FRONT;
-		rasterizerDesc.FrontCounterClockwise = false;
-		rasterizerDesc.DepthBias = 0;
-		rasterizerDesc.SlopeScaledDepthBias = 0.0f;
-		rasterizerDesc.DepthBiasClamp = 0.0f;
-		rasterizerDesc.DepthClipEnable = false;
-		rasterizerDesc.ScissorEnable = false;
-		rasterizerDesc.MultisampleEnable = false;
-		rasterizerDesc.AntialiasedLineEnable = false;
 
 		hr = pDevice->CreateRasterizerState(&rasterizerDesc, &m_pRasterizerStateFront);
 	}
@@ -397,9 +442,37 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	{
 		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
 			"shaders/simpleShader.hlsl",
-			&m_pVertexShader,
+			&m_pSceneVShader,
 			&pVSBlob,
-			&m_pPixelShader
+			&m_pScenePShader
+		))
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
+			"shaders/simpleShader.hlsl",
+			&m_pSceneColorTextureVShader,
+			&pVSBlob,
+			&m_pSceneColorTexturePShader,
+			"HAS_COLOR_TEXTURE=1"
+		))
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		if (!m_pContext->GetShaderCompiler()->CreateVertexAndPixelShaders(
+			"shaders/simpleShader.hlsl",
+			&m_pSceneColorEmissiveVShader,
+			&pVSBlob,
+			&m_pSceneColorEmissivePShader,
+			"HAS_COLOR_TEXTURE=1 HAS_EMISSIVE_TEXTURE=1"
 		))
 		{
 			hr = E_FAIL;
@@ -423,8 +496,9 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	{
 		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
 			CreateInputElementDesc("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0),
-			CreateInputElementDesc("COLOR", DXGI_FORMAT_R32G32B32A32_FLOAT, sizeof(DirectX::XMFLOAT3)),
-			CreateInputElementDesc("NORMAL", DXGI_FORMAT_R32G32B32_FLOAT, sizeof(DirectX::XMFLOAT3) + sizeof(DirectX::XMFLOAT4))
+			CreateInputElementDesc("NORMAL", DXGI_FORMAT_R32G32B32_FLOAT, sizeof(DirectX::XMFLOAT3)),
+			CreateInputElementDesc("TANGENT", DXGI_FORMAT_R32G32B32A32_FLOAT, 2 * sizeof(DirectX::XMFLOAT3)),
+			CreateInputElementDesc("TEXCOORD", DXGI_FORMAT_R32G32_FLOAT, 2 * sizeof(DirectX::XMFLOAT3) + sizeof(DirectX::XMFLOAT4))
 		};
 
 		hr = pDevice->CreateInputLayout(
@@ -442,35 +516,35 @@ HRESULT Renderer::CreatePipelineStateObjects()
 HRESULT Renderer::CreateCubeResourses(Mesh*& cubeMesh)
 {
 	static constexpr Vertex vertices[] = {
-		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f },	{ 0.0f, -1.0f, 0.0f } },
-		{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
-		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, -1.0f, 0.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, -1.0f, 0.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, -1.0f, 0.0f } },
+		{ { -0.5f, -0.5f, -0.5f },	{ 0.0f, -1.0f, 0.0f } },
 
-		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 1.0f, 0.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 0.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 0.0f } },
 
-		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
-		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, 1.0f, 1.0f }, { 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 1.0f, 0.0f, 0.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 0.0f } },
 
-		{ { -0.5f, -0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
-		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 1.0f, 1.0f, 0.0f, 1.0f }, { -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, -0.5f, -0.5f },	{ -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ -1.0f, 0.0f, 0.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ -1.0f, 0.0f, 0.0f } },
 
-		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
-		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
-		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
-		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 1.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f } },
+		{ { 0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f } },
+		{ { -0.5f, -0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f } },
+		{ { -0.5f, 0.5f, 0.5f },	{ 0.0f, 0.0f, 1.0f } },
+		{ { 0.5f, 0.5f, 0.5f },		{ 0.0f, 0.0f, 1.0f } },
 
-		{ { -0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
-		{ { 0.5f, -0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
-		{ { 0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } },
-		{ { -0.5f, 0.5f, -0.5f },	{ 1.0f, 0.0f, 1.0f, 1.0f }, { 0.0f, 0.0f, -1.0f } }
+		{ { -0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, -1.0f } },
+		{ { 0.5f, -0.5f, -0.5f },	{ 0.0f, 0.0f, -1.0f } },
+		{ { 0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, -1.0f } },
+		{ { -0.5f, 0.5f, -0.5f },	{ 0.0f, 0.0f, -1.0f } }
 	};
 
 	static constexpr UINT16 indices[] = {
@@ -512,10 +586,10 @@ HRESULT Renderer::CreateCubeResourses(Mesh*& cubeMesh)
 HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 {
 	static constexpr Vertex vertices[] = {
-	{ { -0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
-	{ { -0.5f, 0.0f, 0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
-	{ { 0.5f, 0.0f, 0.5f },		{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
-	{ { 0.5f, 0.0f, -0.5f },	{ 0.2f, 0.2f, 0.2f, 1.0f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { -0.5f, 0.0f, -0.5f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { -0.5f, 0.0f, 0.5f },	{ 0.0f, 1.0f, 0.0f } },
+	{ { 0.5f, 0.0f, 0.5f },		{ 0.0f, 1.0f, 0.0f } },
+	{ { 0.5f, 0.0f, -0.5f },	{ 0.0f, 1.0f, 0.0f } },
 	};
 
 	static constexpr UINT16 indices[] = {
@@ -565,7 +639,7 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		m_meshes.push_back(mesh);
 		hr = m_pContext->CreateSphereMesh(30, 30, mesh);
-		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, 1.0f, 0.0f);
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(5.0f, 1.0f, 0.0f);
 	}
 
 	if (SUCCEEDED(hr))
@@ -632,6 +706,16 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
+		m_pBloom = Bloom::Create(m_pContext, m_windowWidth, m_windowHeight);
+
+		if (m_pBloom == nullptr)
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
 		m_pEnvironment = Environment::CreateEnvironment(m_pContext, "data/hdri/brown_photostudio_05_4k.hdr");
 
 		if (m_pEnvironment == nullptr)
@@ -650,6 +734,31 @@ HRESULT Renderer::CreateSceneResources()
 
 	return hr;
 }
+
+HRESULT Renderer::LoadModels()
+{
+	//Model* pModel = m_pContext->LoadModel(
+	//	"data/models/cat_with_jet_pack",
+	//	DirectX::XMMatrixScaling(15.0f, 15.0f, 15.0f) * DirectX::XMMatrixRotationY(PI) * DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f)
+	//);
+
+	//Model* pModel = m_pContext->LoadModel(
+	//	"data/models/artorias",
+	//	DirectX::XMMatrixScaling(0.001f, 0.001f, 0.001f) * DirectX::XMMatrixRotationY(PI)
+	//);
+
+	Model* pModel = m_pContext->LoadModel(
+		"data/models/gravity_generator"
+	);
+
+	if (pModel != nullptr)
+	{
+		m_models.push_back(pModel);
+	}
+
+	return S_OK;
+}
+
 
 HRESULT Renderer::SetResourceName(ID3D11Resource* pResource, const std::string& name)
 {
@@ -671,9 +780,12 @@ bool Renderer::Resize(UINT newWidth, UINT newHeight)
 	SafeRelease(m_pBackBufferRTV);
 	SafeRelease(m_pDepthTextureDSV);
 	SafeRelease(m_pDepthTexture);
-	SafeRelease(m_pHDRRenderTarget);
 	SafeRelease(m_pHDRTextureRTV);
 	SafeRelease(m_pHDRTextureSRV);
+	SafeRelease(m_pHDRRenderTarget);
+	SafeRelease(m_pEmissiveTextureRTV);
+	SafeRelease(m_pEmissiveTextureSRV);
+	SafeRelease(m_pEmissiveTexture);
 
 	HRESULT hr = m_pSwapChain->ResizeBuffers(s_swapChainBuffersNum, newWidth, newHeight, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, 0);
 
@@ -683,6 +795,11 @@ bool Renderer::Resize(UINT newWidth, UINT newHeight)
 		m_windowHeight = newHeight;
 
 		hr = CreateBackBuffer();
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pBloom->Resize(newWidth, newHeight);
 	}
 
 	return SUCCEEDED(hr);
@@ -736,7 +853,7 @@ void Renderer::RenderImGui()
 
 	static float bright = 10.0f;
 	static bool isNormal = false, isGeometry = false, isFresnel = false, isAll = true;
-	static float roughness = 0.1f, metalness = 0.1f, rgb[3] = { 1.0f, 0.71f, 0.29f };
+	static float roughness = 1.0f, metalness = 1.0f, rgb[3] = { 1.0f, 1.0f, 1.0f };
 	static int pbrMode = 0; // на самом деле UINT pbrMode
 
 	static auto updatePBRBuffer = [this]()->void
@@ -795,15 +912,17 @@ void Renderer::Render()
 	FLOAT width = s_near / tanf(s_fov / 2.0f);
 	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
 	m_projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
+	m_projMatrixRH = DirectX::XMMatrixPerspectiveRH(width, height, s_near, s_far);
 
 	pContext->ClearState();
-
-	pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
-	//pContext->OMSetRenderTargets(1, &m_pBackBufferRTV, m_pDepthTextureDSV);
 
 	static constexpr float fillColor[4] = { 0.1f, 0.1f, 0.1f, 1.0f };
 	pContext->ClearRenderTargetView(m_pBackBufferRTV, fillColor);
 	pContext->ClearRenderTargetView(m_pHDRTextureRTV, fillColor);
+
+	static constexpr float emissiveTextureFillColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+	pContext->ClearRenderTargetView(m_pEmissiveTextureRTV, emissiveTextureFillColor);
+
 	pContext->ClearDepthStencilView(m_pDepthTextureDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	D3D11_VIEWPORT viewport = {};
@@ -843,13 +962,16 @@ void Renderer::RenderScene()
 {
 	ID3D11DeviceContext* pContext = m_pContext->GetContext();
 
+	ID3D11RenderTargetView* RTVs[] = { m_pHDRTextureRTV, m_pEmissiveTextureRTV };
+	pContext->OMSetRenderTargets(_countof(RTVs), RTVs, m_pDepthTextureDSV);
+
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
 	pContext->RSSetState(m_pRasterizerState);
 
-	pContext->VSSetShader(m_pVertexShader, nullptr, 0);
-	pContext->PSSetShader(m_pPixelShader, nullptr, 0);
+	pContext->VSSetShader(m_pSceneVShader, nullptr, 0);
+	pContext->PSSetShader(m_pScenePShader, nullptr, 0);
 
 	ID3D11ShaderResourceView* SRVs[] =
 	{
@@ -864,6 +986,13 @@ void Renderer::RenderScene()
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
+	ConstantBuffer constantBuffer = {};
+	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
+	constantBuffer.cameraPosition = m_pCamera->GetPosition();
+
+	pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+	pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+
 	for (auto& mesh : m_meshes)
 	{
 		ID3D11Buffer* vertexBuffers[] = { mesh->pVertexBuffer };
@@ -871,22 +1000,89 @@ void Renderer::RenderScene()
 		pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
 		pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-		ConstantBuffer constantBuffer = {};
-
 		DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
-		DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
-		constantBuffer.cameraPosition = m_pCamera->GetPosition();
 		pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
 
-		pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
-		pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 		pContext->DrawIndexed(mesh->indexCount, 0, 0);
+	}
+
+	ID3D11VertexShader* pCachedVS = m_pSceneColorTextureVShader;
+	ID3D11PixelShader* pCachedPS = m_pSceneColorTexturePShader;
+
+	D3D_PRIMITIVE_TOPOLOGY cachedTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+	pContext->VSSetShader(m_pSceneColorTextureVShader, nullptr, 0);
+	pContext->PSSetShader(m_pSceneColorTexturePShader, nullptr, 0);
+
+	for (auto* pModel : m_models)
+	{
+		for (UINT primitiveIdx = 0; primitiveIdx < pModel->PrimitiveNum(); ++primitiveIdx)
+		{
+			const Model::Primitive& primitive = pModel->GetPrimitive(primitiveIdx);
+
+			if (cachedTopology != primitive.topology)
+			{
+				cachedTopology = primitive.topology;
+				pContext->IASetPrimitiveTopology(primitive.topology);
+			}
+
+			if (primitive.pEmissiveTextureSRV != nullptr)
+			{
+				if (pCachedVS != m_pSceneColorEmissiveVShader)
+				{
+					pCachedVS = m_pSceneColorEmissiveVShader;
+					pContext->VSSetShader(m_pSceneColorEmissiveVShader, nullptr, 0);
+				}
+
+				if (pCachedPS != m_pSceneColorEmissivePShader)
+				{
+					pCachedPS = m_pSceneColorEmissivePShader;
+					pContext->PSSetShader(m_pSceneColorEmissivePShader, nullptr, 0);
+				}
+			}
+			else
+			{
+				if (pCachedVS != m_pSceneColorTextureVShader)
+				{
+					pCachedVS = m_pSceneColorTextureVShader;
+					pContext->VSSetShader(m_pSceneColorTextureVShader, nullptr, 0);
+				}
+
+				if (pCachedPS != m_pSceneColorTexturePShader)
+				{
+					pCachedPS = m_pSceneColorTexturePShader;
+					pContext->PSSetShader(m_pSceneColorTexturePShader, nullptr, 0);
+				}
+			}
+
+			ID3D11Buffer* vertexBuffers[] = { primitive.pMesh->pVertexBuffer };
+
+			pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+			pContext->IASetIndexBuffer(primitive.pMesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+			DirectX::XMStoreFloat4x4(&constantBuffer.modelMatrix, DirectX::XMMatrixTranspose(primitive.pMesh->modelMatrix));
+			pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constantBuffer, 0, 0);
+
+			ID3D11ShaderResourceView* meshTextures[] =
+			{
+				primitive.pColorTextureSRV,
+				primitive.pNormalTextureSRV,
+				primitive.pMetalicRoughnessTextureSRV,
+				primitive.pEmissiveTextureSRV
+			};
+			pContext->PSSetShaderResources(10, _countof(meshTextures), meshTextures);
+			pContext->PSSetSamplers(10, 1, &primitive.pSamplerState);
+
+			pContext->DrawIndexed(primitive.pMesh->indexCount, 0, 0);
+		}
 	}
 }
 
 void Renderer::PostProcessing()
 {
 	m_pContext->BeginEvent(L"Post Processing");
+
+	m_pBloom->CalculateBloom(m_pHDRTextureSRV, m_pEmissiveTextureSRV, m_pHDRTextureRTV);
 
 	m_pToneMapping->ToneMap(m_pHDRTextureSRV, m_pBackBufferRTV, m_windowWidth, m_windowHeight, m_timeFromLastFrame / 10e6f);
 
@@ -896,6 +1092,8 @@ void Renderer::PostProcessing()
 void Renderer::RenderEnvironment()
 {
 	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
+	pContext->OMSetRenderTargets(1, &m_pHDRTextureRTV, m_pDepthTextureDSV);
 
 	m_pContext->BeginEvent(L"Environment");
 

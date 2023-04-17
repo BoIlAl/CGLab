@@ -43,7 +43,7 @@ private:
 
 	void Update(FLOAT currentExposure, FLOAT deltaTime);
 
-	float CalculateAverageBrightness(
+	FLOAT CalculateAverageBrightness(
 		ID3D11ShaderResourceView* pSrcTextureSRV,
 		UINT renderTargetWidth,
 		UINT renderTargetHeight);

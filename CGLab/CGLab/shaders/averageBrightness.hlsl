@@ -38,5 +38,6 @@ VSOut VS(VSIn input)
 float PS(VSOut input) : SV_TARGET
 {
     float3 color = ColorTexture.Sample(MinMagLinearSampler, input.texCoord).rgb;
+
     return log10(L(color) + 1);
 }

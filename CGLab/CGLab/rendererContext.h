@@ -2,6 +2,7 @@
 #include "framework.h"
 #include "shaderCompiler.h"
 #include "common.h"
+#include "tiny_gltf.h"
 
 struct ID3D11Device;
 struct ID3D11DeviceContext;
@@ -11,27 +12,16 @@ struct ID3D11ShaderResourceView;
 
 class PreintegratedBRDFBuilder;
 class HDRITextureLoader;
+class Model;
+struct Mesh;
 
 
 struct Vertex
 {
 	DirectX::XMFLOAT3 position;
-	DirectX::XMFLOAT4 color;
 	DirectX::XMFLOAT3 normal;
-};
-
-struct Mesh
-{
-	ID3D11Buffer* pVertexBuffer = nullptr;
-	ID3D11Buffer* pIndexBuffer = nullptr;
-	UINT indexCount = 0;
-	DirectX::XMMATRIX modelMatrix;
-
-	~Mesh()
-	{
-		SafeRelease(pIndexBuffer);
-		SafeRelease(pVertexBuffer);
-	}
+	DirectX::XMFLOAT4 tangent;
+	DirectX::XMFLOAT2 texCoord;
 };
 
 
@@ -80,6 +70,8 @@ public:
 
 	HRESULT CreateSphereMesh(UINT16 latitudeBands, UINT16 longitudeBands, Mesh*& sphereMesh) const;
 
+	Model* LoadModel(const std::string& gltfModelFileName, const DirectX::XMMATRIX& initMatrix = DirectX::XMMatrixIdentity());
+
 private:
 	RendererContext();
 
@@ -95,6 +87,8 @@ private:
 	HDRITextureLoader* m_pHDRITextureLoader;
 
 	PreintegratedBRDFBuilder* m_pPreintegratedBRDFBuilder;
+
+	tinygltf::TinyGLTF* m_pGLTFLoader;
 
 	bool m_isDebug;
 };

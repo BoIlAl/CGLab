@@ -57,10 +57,10 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;TINYGLTF_NO_STB_IMAGE_WRITE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>stb;libs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -74,10 +74,10 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WINDOWS;TINYGLTF_NO_STB_IMAGE_WRITE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
-      <AdditionalIncludeDirectories>stb;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>stb;libs;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -89,6 +89,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="app.h" />
+    <ClInclude Include="bloom.h" />
     <ClInclude Include="camera.h" />
     <ClInclude Include="CGLab.h" />
     <ClInclude Include="common.h" />
@@ -103,7 +104,10 @@
     <ClInclude Include="imGui\imstb_rectpack.h" />
     <ClInclude Include="imGui\imstb_textedit.h" />
     <ClInclude Include="imGui\imstb_truetype.h" />
+    <ClInclude Include="libs\json.hpp" />
+    <ClInclude Include="libs\tiny_gltf.h" />
     <ClInclude Include="light.h" />
+    <ClInclude Include="model.h" />
     <ClInclude Include="preintegratedBRDF.h" />
     <ClInclude Include="renderer.h" />
     <ClInclude Include="rendererContext.h" />
@@ -115,9 +119,11 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="app.cpp" />
+    <ClCompile Include="bloom.cpp" />
     <ClCompile Include="camera.cpp" />
     <ClCompile Include="CGLab.cpp" />
     <ClCompile Include="environment.cpp" />
+    <ClCompile Include="framework.cpp" />
     <ClCompile Include="HDRITextureLoader.cpp" />
     <ClCompile Include="imGui\imgui.cpp" />
     <ClCompile Include="imGui\imgui_draw.cpp" />
@@ -126,6 +132,7 @@
     <ClCompile Include="imGui\imgui_tables.cpp" />
     <ClCompile Include="imGui\imgui_widgets.cpp" />
     <ClCompile Include="light.cpp" />
+    <ClCompile Include="model.cpp" />
     <ClCompile Include="preintegratedBRDF.cpp" />
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="rendererContext.cpp" />
@@ -193,6 +200,11 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\prefilteredColor.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\bloom.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

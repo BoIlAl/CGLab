@@ -287,7 +287,7 @@ void ToneMapping::Update(FLOAT averageBrightness, FLOAT deltaTime)
 	m_pContext->GetContext()->UpdateSubresource(m_pExposureBuffer, 0, nullptr, &exposureBuffer, 0, 0);
 }
 
-float ToneMapping::CalculateAverageBrightness(
+FLOAT ToneMapping::CalculateAverageBrightness(
 	ID3D11ShaderResourceView* pSrcTextureSRV,
 	UINT renderTargetWidth,
 	UINT renderTargetHeight

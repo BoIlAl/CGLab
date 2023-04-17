@@ -26,6 +26,7 @@ struct ID3D11Resource;
 class ShaderCompiler;
 class ToneMapping;
 class Camera;
+class Bloom;
 
 
 static constexpr UINT MaxLightNum = 3;
@@ -65,6 +66,8 @@ private:
 
 	HRESULT CreateSceneResources();
 
+	HRESULT LoadModels();
+
 	HRESULT SetResourceName(ID3D11Resource* pResource, const std::string& name);
 
 	void Update();
@@ -93,6 +96,10 @@ private:
 	ID3D11RenderTargetView* m_pHDRTextureRTV;
 	ID3D11ShaderResourceView* m_pHDRTextureSRV;
 
+	ID3D11Texture2D* m_pEmissiveTexture;
+	ID3D11RenderTargetView* m_pEmissiveTextureRTV;
+	ID3D11ShaderResourceView* m_pEmissiveTextureSRV;
+
 	ID3D11RasterizerState* m_pRasterizerState;
 	ID3D11RasterizerState* m_pRasterizerStateFront;
 	ID3D11DepthStencilState* m_pDepthStencilState;
@@ -106,8 +113,14 @@ private:
 
 	ID3D11Buffer* m_pLightBuffer;
 
-	ID3D11VertexShader* m_pVertexShader;
-	ID3D11PixelShader* m_pPixelShader;
+	ID3D11VertexShader* m_pSceneVShader;
+	ID3D11PixelShader* m_pScenePShader;
+
+	ID3D11VertexShader* m_pSceneColorTextureVShader;
+	ID3D11PixelShader* m_pSceneColorTexturePShader;
+
+	ID3D11VertexShader* m_pSceneColorEmissiveVShader;
+	ID3D11PixelShader* m_pSceneColorEmissivePShader;
 
 	ID3D11VertexShader* m_pEnvironmentVShader;
 	ID3D11PixelShader* m_pEnvironmentPShader;
@@ -125,6 +138,7 @@ private:
 	UINT m_windowHeight;
 
 	DirectX::XMMATRIX m_projMatrix;
+	DirectX::XMMATRIX m_projMatrixRH;
 
 	size_t m_startTime;
 	size_t m_currentTime;
@@ -134,6 +148,10 @@ private:
 
 	ToneMapping* m_pToneMapping;
 
+	Bloom* m_pBloom;
+
 	std::vector<PointLight> m_lights;
+
+	std::vector<Model*> m_models;
 };
 

@@ -17,7 +17,8 @@ public:
 		const char* shaderFileName,
 		ID3D11VertexShader** ppVS,
 		ID3D10Blob** ppVSBinaryBlob,
-		ID3D11PixelShader** ppPS
+		ID3D11PixelShader** ppPS,
+		const char* defines = ""
 	);
 
 private:
