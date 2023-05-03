@@ -125,6 +125,8 @@ bool ShadowMap::Init()
 
 ID3D11DepthStencilView* ShadowMap::GetShadowMapSplitDSV(UINT splitIdx) const
 {
+	return m_pShadowMapDSV;
+
 	if (m_splitNum < splitIdx)
 	{
 		return nullptr;

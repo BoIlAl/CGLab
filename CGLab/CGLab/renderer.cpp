@@ -673,7 +673,7 @@ HRESULT Renderer::CreateSceneResources()
 	{
 		m_meshes.push_back(mesh);
 		hr = m_pContext->CreateSphereMesh(30, 30, mesh);
-		mesh->modelMatrix = DirectX::XMMatrixTranslation(5.0f, 1.0f, 0.0f);
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(5.0f, 1.0f, 20.0f);
 	}
 
 	if (SUCCEEDED(hr))
@@ -784,23 +784,43 @@ HRESULT Renderer::CreateSceneResources()
 
 HRESULT Renderer::LoadModels()
 {
-	//Model* pModel = m_pContext->LoadModel(
-	//	"data/models/cat_with_jet_pack",
-	//	DirectX::XMMatrixScaling(15.0f, 15.0f, 15.0f) * DirectX::XMMatrixRotationY(PI) * DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f)
-	//);
-
-	//Model* pModel = m_pContext->LoadModel(
-	//	"data/models/artorias",
-	//	DirectX::XMMatrixScaling(0.001f, 0.001f, 0.001f) * DirectX::XMMatrixRotationY(PI)
-	//);
-
-	Model* pModel = m_pContext->LoadModel(
-		"data/models/gravity_generator"
-	);
-
-	if (pModel != nullptr)
+	struct ModelLoadData
 	{
-		m_models.push_back(pModel);
+		std::string modelName;
+		DirectX::XMMATRIX initMatrix = DirectX::XMMatrixIdentity();
+	};
+
+	std::vector<ModelLoadData> models =
+	{
+		{ 
+			"data/models/gravity_generator",
+			DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f)
+		},
+		{ 
+			"data/models/artorias",
+			DirectX::XMMatrixScaling(0.002f, 0.002f, 0.002f) *
+			DirectX::XMMatrixRotationY(PI) *
+			DirectX::XMMatrixTranslation(-5.0f, -1.75f, 10.0f)
+		},
+		{ 
+			"data/models/cat_with_jet_pack",
+			DirectX::XMMatrixScaling(15.0f, 15.0f, 15.0f) *
+			DirectX::XMMatrixRotationY(PI) *
+			DirectX::XMMatrixTranslation(10.0f, -2.0f, 15.0f)
+		}
+	};
+
+	for (const auto& modelLoadData : models)
+	{
+		Model* pModel = m_pContext->LoadModel(
+			modelLoadData.modelName,
+			modelLoadData.initMatrix
+		);
+
+		if (pModel != nullptr)
+		{
+			m_models.push_back(pModel);
+		}
 	}
 
 	return S_OK;
@@ -1200,7 +1220,7 @@ void Renderer::RenderShadowMap()
 	m_pDirectionalLightShadowMap->CalculateVpMatrixForDirectionalLight(m_directionalLight.GetDirection(), vpMatrix);
 	m_directionalLight.SetVpMatrix(DirectX::XMMatrixTranspose(vpMatrix));
 
-	//pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(0));
+	pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(0));
 
 	ConstantBuffer constBuffer = {};
 	constBuffer.vpMatrix = m_directionalLight.GetVpMatrix();
@@ -1234,9 +1254,9 @@ void Renderer::RenderShadowMap()
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	for (UINT splitIdx = 0; splitIdx < m_pDirectionalLightShadowMap->GetShadowMapSplitNum(); ++splitIdx)
+	//for (UINT splitIdx = 0; splitIdx < m_pDirectionalLightShadowMap->GetShadowMapSplitNum(); ++splitIdx)
 	{
-		pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(splitIdx));
+		//pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(splitIdx));
 
 		for (auto& mesh : m_meshes)
 		{
