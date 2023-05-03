@@ -21,6 +21,13 @@ public:
 		const char* defines = ""
 	);
 
+	bool CreateVertexShader(
+		const char* shaderFileName,
+		ID3D11VertexShader** ppVS,
+		ID3D10Blob** ppVSBinaryBlob,
+		const char* defines = ""
+	);
+
 private:
 	ID3D11Device* m_pDevice;
 	bool m_isDebug;

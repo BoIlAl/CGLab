@@ -27,7 +27,7 @@ class ShaderCompiler;
 class ToneMapping;
 class Camera;
 class Bloom;
-
+class ShadowMap;
 
 static constexpr UINT MaxLightNum = 3;
 
@@ -73,6 +73,7 @@ private:
 	void Update();
 	void RenderScene();
 	void RenderEnvironment();
+	void RenderShadowMap();
 	void PostProcessing();
 
 	void FillLightBuffer();
@@ -104,7 +105,8 @@ private:
 	ID3D11RasterizerState* m_pRasterizerStateFront;
 	ID3D11DepthStencilState* m_pDepthStencilState;
 	ID3D11SamplerState* m_pMinMagMipLinearSampler;
-	ID3D11SamplerState* m_MinMagMipLinearSamplerClamp;
+	ID3D11SamplerState* m_pMinMagMipLinearSamplerClamp;
+	ID3D11SamplerState* m_pMinMagMipNearestSampler;
 
 	std::vector<Mesh*> m_meshes;
 	Mesh* m_pEnvironmentSphere;
@@ -125,6 +127,8 @@ private:
 	ID3D11VertexShader* m_pEnvironmentVShader;
 	ID3D11PixelShader* m_pEnvironmentPShader;
 
+	ID3D11VertexShader* m_pShadowMapVShader;
+
 	ID3D11InputLayout* m_pInputLayout;
 
 	ID3D11Texture2D* m_pPBRDFTexture;
@@ -138,7 +142,6 @@ private:
 	UINT m_windowHeight;
 
 	DirectX::XMMATRIX m_projMatrix;
-	DirectX::XMMATRIX m_projMatrixRH;
 
 	size_t m_startTime;
 	size_t m_currentTime;
@@ -150,8 +153,10 @@ private:
 
 	Bloom* m_pBloom;
 
+	ShadowMap* m_pDirectionalLightShadowMap;
+
 	std::vector<PointLight> m_lights;
+	DirectionalLight m_directionalLight;
 
 	std::vector<Model*> m_models;
 };
-

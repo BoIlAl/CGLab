@@ -16,6 +16,7 @@
 #include "app.h"
 #include "model.h"
 #include "bloom.h"
+#include "shadowMap.h"
 
 #include "imGui/imgui_impl_dx11.h"
 #include "imGui/imgui_impl_win32.h"
@@ -30,6 +31,8 @@ struct ConstantBuffer
 
 struct LightBuffer
 {
+	DirectionalLight directionalLight;
+
 	DirectX::XMUINT4 lightsCount; // r
 	PointLight lights[MaxLightNum];
 };
@@ -90,10 +93,12 @@ Renderer::Renderer()
 	, m_pSceneColorEmissivePShader(nullptr)
 	, m_pEnvironmentVShader(nullptr)
 	, m_pEnvironmentPShader(nullptr)
+	, m_pShadowMapVShader(nullptr)
 	, m_pInputLayout(nullptr)
 	, m_pConstantBuffer(nullptr)
 	, m_pMinMagMipLinearSampler(nullptr)
-	, m_MinMagMipLinearSamplerClamp(nullptr)
+	, m_pMinMagMipLinearSamplerClamp(nullptr)
+	, m_pMinMagMipNearestSampler(nullptr)
 	, m_pPBRDFTexture(nullptr)
 	, m_pPBRDFTextureSRV(nullptr)
 	, m_pEnvironment(nullptr)
@@ -108,6 +113,7 @@ Renderer::Renderer()
 	, m_pCamera(nullptr)
 	, m_pToneMapping(nullptr)
 	, m_pBloom(nullptr)
+	, m_pDirectionalLightShadowMap(nullptr)
 {}
 
 Renderer::~Renderer()
@@ -206,10 +212,12 @@ void Renderer::Release()
 	SafeRelease(m_pSceneColorTextureVShader);
 	SafeRelease(m_pScenePShader);
 	SafeRelease(m_pSceneVShader);
-	SafeRelease(m_MinMagMipLinearSamplerClamp);
+	SafeRelease(m_pMinMagMipNearestSampler);
+	SafeRelease(m_pMinMagMipLinearSamplerClamp);
 	SafeRelease(m_pMinMagMipLinearSampler);
 	SafeRelease(m_pEnvironmentPShader);
 	SafeRelease(m_pEnvironmentVShader);
+	SafeRelease(m_pShadowMapVShader);
 	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerStateFront);
@@ -231,6 +239,7 @@ void Renderer::Release()
 	delete m_pToneMapping;
 	delete m_pBloom;
 	delete m_pCamera;
+	delete m_pDirectionalLightShadowMap;
 
 	for (auto& mesh : m_meshes)
 	{
@@ -385,8 +394,8 @@ HRESULT Renderer::CreatePipelineStateObjects()
 	rasterizerDesc.FillMode = D3D11_FILL_SOLID;
 	rasterizerDesc.CullMode = D3D11_CULL_BACK;
 	rasterizerDesc.FrontCounterClockwise = false;
-	rasterizerDesc.DepthBias = 0;
-	rasterizerDesc.SlopeScaledDepthBias = 0.0f;
+	rasterizerDesc.DepthBias = 7;
+	rasterizerDesc.SlopeScaledDepthBias = 2.8284271247f; // 2 * sqrt(2)
 	rasterizerDesc.DepthBiasClamp = 0.0f;
 	rasterizerDesc.DepthClipEnable = false;
 	rasterizerDesc.ScissorEnable = false;
@@ -415,13 +424,26 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 		hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagMipLinearSampler);
 
-		samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-		samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-		samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+		if (SUCCEEDED(hr))
+		{
+			samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+			samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+			samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+
+			hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagMipLinearSamplerClamp);
+		}
 
 		if (SUCCEEDED(hr))
 		{
-			hr = pDevice->CreateSamplerState(&samplerDesc, &m_MinMagMipLinearSamplerClamp);
+			samplerDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
+			samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+			samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+			samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+			samplerDesc.BorderColor[0] = samplerDesc.BorderColor[1] =
+			samplerDesc.BorderColor[2] = samplerDesc.BorderColor[3] = 1.0f;
+			samplerDesc.ComparisonFunc = D3D11_COMPARISON_LESS;
+
+			hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagMipNearestSampler);
 		}
 	}
 
@@ -486,6 +508,18 @@ HRESULT Renderer::CreatePipelineStateObjects()
 			&m_pEnvironmentVShader,
 			&pVSBlob,
 			&m_pEnvironmentPShader
+		))
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		if (!m_pContext->GetShaderCompiler()->CreateVertexShader(
+			"shaders/shadowMap.hlsl",
+			&m_pShadowMapVShader,
+			&pVSBlob
 		))
 		{
 			hr = E_FAIL;
@@ -612,7 +646,7 @@ HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 
 	if (SUCCEEDED(hr))
 	{
-		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(30.0f, 1.0f, 30.0f);
+		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(90.0f, 1.0f, 90.0f);
 		planeMesh = mesh;
 	}
 	else
@@ -682,8 +716,11 @@ HRESULT Renderer::CreateSceneResources()
 		//m_lights.push_back(PointLight({ 4.0f, -0.25f, -4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
 		//m_lights.push_back(PointLight({ 0.0f, -0.25f, 4.0f }, { 0.0f, 1.0f, 0.0f, 1.0f }, 1.0f));
 
+		m_directionalLight = DirectionalLight({ 1.0f, -1.0f, 0.0f }, { 5.4f, 5.7f, 5.4f, 1.0f });
+
 		LightBuffer lightBuffer = {};
-		lightBuffer.lightsCount.x = 0;
+		lightBuffer.directionalLight = m_directionalLight;
+		lightBuffer.lightsCount.x = 0; // = m_lights.size();
 		memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
 
 		D3D11_SUBRESOURCE_DATA lightBufferData = {};
@@ -719,6 +756,16 @@ HRESULT Renderer::CreateSceneResources()
 		m_pEnvironment = Environment::CreateEnvironment(m_pContext, "data/hdri/brown_photostudio_05_4k.hdr");
 
 		if (m_pEnvironment == nullptr)
+		{
+			hr = E_FAIL;
+		}
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		m_pDirectionalLightShadowMap = ShadowMap::CreateShadowMap(m_pContext, 4u, 2048u);
+
+		if (m_pDirectionalLightShadowMap == nullptr)
 		{
 			hr = E_FAIL;
 		}
@@ -822,6 +869,7 @@ Camera* Renderer::GetCamera()
 void Renderer::FillLightBuffer()
 {
 	static LightBuffer lightBuffer = {};
+	lightBuffer.directionalLight = m_directionalLight;
 	lightBuffer.lightsCount.x = 0;
 	memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
 
@@ -912,7 +960,9 @@ void Renderer::Render()
 	FLOAT width = s_near / tanf(s_fov / 2.0f);
 	FLOAT height = ((FLOAT)m_windowHeight / m_windowWidth) * width;
 	m_projMatrix = DirectX::XMMatrixPerspectiveLH(width, height, s_near, s_far);
-	m_projMatrixRH = DirectX::XMMatrixPerspectiveRH(width, height, s_near, s_far);
+
+	RenderShadowMap();
+	FillLightBuffer();
 
 	pContext->ClearState();
 
@@ -981,8 +1031,13 @@ void Renderer::RenderScene()
 	};
 	pContext->PSSetShaderResources(0, _countof(SRVs), SRVs);
 
-	ID3D11SamplerState* samplers[] = { m_pMinMagMipLinearSampler, m_MinMagMipLinearSamplerClamp };
-	pContext->PSSetSamplers(0, 2, samplers);
+	ID3D11SamplerState* samplers[] =
+	{
+		m_pMinMagMipLinearSampler,
+		m_pMinMagMipLinearSamplerClamp,
+		m_pMinMagMipNearestSampler
+	};
+	pContext->PSSetSamplers(0, _countof(samplers), samplers);
 
 	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
 
@@ -992,6 +1047,9 @@ void Renderer::RenderScene()
 
 	pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 	pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
+
+	ID3D11ShaderResourceView* shadowMapSRVs[] = { m_pDirectionalLightShadowMap->GetShadowMapSRV() };
+	pContext->PSSetShaderResources(20, _countof(shadowMapSRVs), shadowMapSRVs);
 
 	for (auto& mesh : m_meshes)
 	{
@@ -1125,6 +1183,98 @@ void Renderer::RenderEnvironment()
 	pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 	pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 	pContext->DrawIndexed(m_pEnvironmentSphere->indexCount, 0, 0);
+
+	m_pContext->EndEvent();
+}
+
+void Renderer::RenderShadowMap()
+{
+	ID3D11DeviceContext* pContext = m_pContext->GetContext();
+
+	m_pContext->BeginEvent(L"Shadow Map");
+
+	pContext->ClearState();
+	m_pDirectionalLightShadowMap->Clear();
+
+	DirectX::XMMATRIX vpMatrix = DirectX::XMMatrixIdentity();
+	m_pDirectionalLightShadowMap->CalculateVpMatrixForDirectionalLight(m_directionalLight.GetDirection(), vpMatrix);
+	m_directionalLight.SetVpMatrix(DirectX::XMMatrixTranspose(vpMatrix));
+
+	//pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(0));
+
+	ConstantBuffer constBuffer = {};
+	constBuffer.vpMatrix = m_directionalLight.GetVpMatrix();
+
+	D3D11_VIEWPORT viewport = {};
+	viewport.TopLeftX = 0.0f;
+	viewport.TopLeftY = 0.0f;
+	viewport.Width = (FLOAT)m_pDirectionalLightShadowMap->GetShadowMapTextureSize();
+	viewport.Height = (FLOAT)m_pDirectionalLightShadowMap->GetShadowMapTextureSize();
+	viewport.MinDepth = 0.0f;
+	viewport.MaxDepth = 1.0f;
+
+	D3D11_RECT rect = {};
+	rect.left = 0;
+	rect.top = 0;
+	rect.right = m_pDirectionalLightShadowMap->GetShadowMapTextureSize();
+	rect.bottom = m_pDirectionalLightShadowMap->GetShadowMapTextureSize();
+
+	pContext->RSSetViewports(1, &viewport);
+	pContext->RSSetScissorRects(1, &rect);
+	pContext->RSSetState(m_pRasterizerState);
+
+	pContext->IASetInputLayout(m_pInputLayout);
+	pContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
+
+	pContext->VSSetShader(m_pShadowMapVShader, nullptr, 0);
+
+	pContext->VSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+
+	UINT stride = sizeof(Vertex);
+	UINT offset = 0;
+
+	for (UINT splitIdx = 0; splitIdx < m_pDirectionalLightShadowMap->GetShadowMapSplitNum(); ++splitIdx)
+	{
+		pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(splitIdx));
+
+		for (auto& mesh : m_meshes)
+		{
+			pContext->IASetVertexBuffers(0, 1, &mesh->pVertexBuffer, &stride, &offset);
+			pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+			DirectX::XMStoreFloat4x4(&constBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
+			pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constBuffer, 0, 0);
+
+			pContext->DrawIndexed(mesh->indexCount, 0, 0);
+		}
+
+		D3D_PRIMITIVE_TOPOLOGY cachedTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+		for (auto* pModel : m_models)
+		{
+			for (UINT primitiveIdx = 0; primitiveIdx < pModel->PrimitiveNum(); ++primitiveIdx)
+			{
+				const Model::Primitive& primitive = pModel->GetPrimitive(primitiveIdx);
+
+				if (cachedTopology != primitive.topology)
+				{
+					cachedTopology = primitive.topology;
+					pContext->IASetPrimitiveTopology(primitive.topology);
+				}
+
+				ID3D11Buffer* vertexBuffers[] = { primitive.pMesh->pVertexBuffer };
+
+				pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+				pContext->IASetIndexBuffer(primitive.pMesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+				DirectX::XMStoreFloat4x4(&constBuffer.modelMatrix, DirectX::XMMatrixTranspose(primitive.pMesh->modelMatrix));
+				pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constBuffer, 0, 0);
+
+				pContext->DrawIndexed(primitive.pMesh->indexCount, 0, 0);
+			}
+		}
+	}
 
 	m_pContext->EndEvent();
 }
