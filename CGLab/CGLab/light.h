@@ -32,14 +32,14 @@ public:
 
 	void SetDirection(const DirectX::XMFLOAT3& direction);
 	void SetColor(const DirectX::XMFLOAT4& color);
-	void SetVpMatrix(const DirectX::XMMATRIX& vpMatrix);
+	void SetVpMatrix(UINT splitIdx, const DirectX::XMMATRIX& vpMatrix);
 
 	inline DirectX::XMFLOAT3 GetDirection() const { return { m_direction.x, m_direction.y, m_direction.z }; }
-	inline DirectX::XMFLOAT4X4 GetVpMatrix() const { return m_vpMatrix; }
+	inline DirectX::XMFLOAT4X4 GetVpMatrix(UINT splitIdx) const { return m_vpMatrix[splitIdx]; }
 
 private:
 	DirectX::XMFLOAT4 m_direction;
 	DirectX::XMFLOAT4 m_color;
 
-	DirectX::XMFLOAT4X4 m_vpMatrix;
+	DirectX::XMFLOAT4X4 m_vpMatrix[4];
 };

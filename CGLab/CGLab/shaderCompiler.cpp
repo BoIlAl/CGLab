@@ -191,3 +191,45 @@ bool ShaderCompiler::CreateVertexShader(
 
 	return SUCCEEDED(hr);
 }
+
+
+bool ShaderCompiler::CreateGeometryShader(
+	const char* shaderFileName,
+	ID3D11GeometryShader** ppGS,
+	ID3D10Blob** ppGSBinaryBlob,
+	const char* defines
+)
+{
+	std::string shaderSource;
+
+	if (!LoadShaderSource(shaderFileName, m_isDebug, defines, shaderSource))
+	{
+		return false;
+	}
+
+	ID3DBlob* pErrors = nullptr;
+	UINT flags = m_isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
+
+	HRESULT hr = D3DCompile(
+		shaderSource.c_str(), shaderSource.size(), shaderFileName, nullptr, nullptr,
+		"GS", "gs_5_0", flags, 0, ppGSBinaryBlob, &pErrors
+	);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pDevice->CreateGeometryShader(
+			(*ppGSBinaryBlob)->GetBufferPointer(),
+			(*ppGSBinaryBlob)->GetBufferSize(),
+			nullptr,
+			ppGS
+		);
+	}
+	else
+	{
+		OutputDebugStringA((char*)pErrors->GetBufferPointer());
+	}
+
+	SafeRelease(pErrors);
+
+	return SUCCEEDED(hr);
+}

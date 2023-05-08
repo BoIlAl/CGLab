@@ -1,4 +1,5 @@
-static const uint MaxLightNum = 3;
+static const uint MaxLightNum = 3u;
+static const uint MaxSplitsNum = 4u;
 
 static const float PI = 3.14159265f;
 
@@ -14,6 +15,7 @@ cbuffer ConstantBuffer : register(b0)
     float4x4 vpMatrix;
     
     float3 cameraPosition;
+    float3 cameraDirection;
 }
 
 struct DirectionalLight
@@ -21,7 +23,7 @@ struct DirectionalLight
     float4 direction;
     float4 color;
     
-    float4x4 dirLightVpMatrix;
+    float4x4 dirLightVpMatrix[MaxSplitsNum];
 };
 
 struct Light
@@ -33,6 +35,7 @@ struct Light
 
 cbuffer LightBuffer : register(b1)
 {
+    float4 shadowSplitDists;
     DirectionalLight directionalLight;
     
     uint4 lightsCount;
@@ -234,9 +237,28 @@ PSOut PS(VSOut input)
         float3 lightImpact = directionalLight.color.rgb;
         lightImpact *= saturate(dot(dirToLight, normal));
         
-        float4 lightProjPos = mul(float4(input.worldPosition.xyz, 1.0f), directionalLight.dirLightVpMatrix);
+        float4 lightProjPos = mul(float4(input.worldPosition.xyz, 1.0f), directionalLight.dirLightVpMatrix[0]);
         float2 texCoord = lightProjPos.xy * float2(0.5, -0.5) + float2(0.5f, 0.5f);
-
+        
+        float dist = dot(input.worldPosition.xyz - cameraPosition.xyz, cameraDirection);
+        
+        if (dist < shadowSplitDists.x)
+        {
+            resultColor.r += 1.0f;
+        }
+        else if (dist < shadowSplitDists.y)
+        {
+            resultColor.g += 1.0f;
+        }
+        else if (dist < shadowSplitDists.z)
+        {
+            resultColor.b += 1.0f;
+        }
+        else if (dist < shadowSplitDists.w)
+        {
+            resultColor.rg += 1.0f;
+        }
+        
         float depth = ShadowMap.SampleCmp(MinMagMipNearestSampler, texCoord, lightProjPos.z);
         
         if (lightProjPos.z <= depth)

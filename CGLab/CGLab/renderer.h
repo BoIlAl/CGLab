@@ -112,8 +112,9 @@ private:
 	Mesh* m_pEnvironmentSphere;
 
 	ID3D11Buffer* m_pConstantBuffer;
-
+	ID3D11Buffer* m_pPBRBuffer;
 	ID3D11Buffer* m_pLightBuffer;
+	ID3D11Buffer* m_pPSSMConstantBuffer;
 
 	ID3D11VertexShader* m_pSceneVShader;
 	ID3D11PixelShader* m_pScenePShader;
@@ -128,6 +129,7 @@ private:
 	ID3D11PixelShader* m_pEnvironmentPShader;
 
 	ID3D11VertexShader* m_pShadowMapVShader;
+	ID3D11GeometryShader* m_pShadowMapGShader;
 
 	ID3D11InputLayout* m_pInputLayout;
 
@@ -136,7 +138,6 @@ private:
 
 	Environment* m_pEnvironment;
 
-	ID3D11Buffer* m_pPBRBuffer;
 
 	UINT m_windowWidth;
 	UINT m_windowHeight;

@@ -28,7 +28,10 @@ DirectionalLight::DirectionalLight(const DirectX::XMFLOAT3& direction, const Dir
 	: m_direction(direction.x, direction.y, direction.z, 1.0f)
 	, m_color(color)
 {
-	DirectX::XMStoreFloat4x4(&m_vpMatrix, DirectX::XMMatrixIdentity());
+	for (UINT i = 0; i < 4; ++i)
+	{
+		DirectX::XMStoreFloat4x4(&m_vpMatrix[i], DirectX::XMMatrixIdentity());
+	}
 }
 
 void DirectionalLight::SetDirection(const DirectX::XMFLOAT3& direction)
@@ -44,7 +47,9 @@ void DirectionalLight::SetColor(const DirectX::XMFLOAT4& color)
 	m_color = color;
 }
 
-void DirectionalLight::SetVpMatrix(const DirectX::XMMATRIX& vpMatrix)
+void DirectionalLight::SetVpMatrix(UINT splitIdx, const DirectX::XMMATRIX& vpMatrix)
 {
-	DirectX::XMStoreFloat4x4(&m_vpMatrix, vpMatrix);
+	assert(splitIdx < 4);
+
+	DirectX::XMStoreFloat4x4(&m_vpMatrix[splitIdx], vpMatrix);
 }

@@ -95,7 +95,7 @@ DirectX::XMMATRIX Camera::GetViewMatrix() const
 
 DirectX::XMMATRIX Camera::GetViewMatrixRH() const
 {
-	return DirectX::XMMatrixLookAtRH(m_eye, m_viewDir, m_up);
+	return DirectX::XMMatrixLookToRH(m_eye, m_viewDir, m_up);
 }
 
 DirectX::XMFLOAT4 Camera::GetPosition() const
@@ -104,6 +104,21 @@ DirectX::XMFLOAT4 Camera::GetPosition() const
 	DirectX::XMStoreFloat4(&position, m_eye);
 
 	return position;
+}
+
+DirectX::XMVECTOR Camera::GetDirection() const
+{
+	return m_viewDir;
+}
+
+DirectX::XMVECTOR Camera::GetUp() const
+{
+	return m_up;
+}
+
+DirectX::XMVECTOR Camera::GetRight() const
+{
+	return DirectX::XMVector3Cross(m_up, m_viewDir);
 }
 
 Camera::~Camera()

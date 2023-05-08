@@ -8,6 +8,8 @@ struct Mesh
 	UINT indexCount = 0;
 	DirectX::XMMATRIX modelMatrix = DirectX::XMMatrixIdentity();
 
+	bool hasShadow = true;
+
 	~Mesh()
 	{
 		SafeRelease(pIndexBuffer);

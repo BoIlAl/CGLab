@@ -27,10 +27,18 @@ struct ConstantBuffer
 	DirectX::XMFLOAT4X4 modelMatrix;
 	DirectX::XMFLOAT4X4 vpMatrix;
 	DirectX::XMFLOAT4 cameraPosition;
+	DirectX::XMFLOAT4 cameraDirection;
+};
+
+struct PSSMConstantBuffer
+{
+	DirectX::XMFLOAT4X4 modelMatrix;
+	DirectX::XMFLOAT4X4 vpMatrices[4];
 };
 
 struct LightBuffer
 {
+	DirectX::XMFLOAT4 shadowSplitDists;
 	DirectionalLight directionalLight;
 
 	DirectX::XMUINT4 lightsCount; // r
@@ -84,7 +92,6 @@ Renderer::Renderer()
 	, m_pRasterizerState(nullptr)
 	, m_pRasterizerStateFront(nullptr)
 	, m_pDepthStencilState(nullptr)
-	, m_pLightBuffer(nullptr)
 	, m_pSceneVShader(nullptr)
 	, m_pScenePShader(nullptr)
 	, m_pSceneColorTextureVShader(nullptr)
@@ -94,8 +101,12 @@ Renderer::Renderer()
 	, m_pEnvironmentVShader(nullptr)
 	, m_pEnvironmentPShader(nullptr)
 	, m_pShadowMapVShader(nullptr)
+	, m_pShadowMapGShader(nullptr)
 	, m_pInputLayout(nullptr)
 	, m_pConstantBuffer(nullptr)
+	, m_pPBRBuffer(nullptr)
+	, m_pLightBuffer(nullptr)
+	, m_pPSSMConstantBuffer(nullptr)
 	, m_pMinMagMipLinearSampler(nullptr)
 	, m_pMinMagMipLinearSamplerClamp(nullptr)
 	, m_pMinMagMipNearestSampler(nullptr)
@@ -103,7 +114,6 @@ Renderer::Renderer()
 	, m_pPBRDFTextureSRV(nullptr)
 	, m_pEnvironment(nullptr)
 	, m_pEnvironmentSphere(nullptr)
-	, m_pPBRBuffer(nullptr)
 	, m_windowWidth(0)
 	, m_windowHeight(0)
 	, m_projMatrix(DirectX::XMMatrixIdentity())
@@ -202,7 +212,6 @@ bool Renderer::InitImGui(HWND hWnd)
 
 void Renderer::Release()
 {
-	SafeRelease(m_pPBRBuffer);
 	SafeRelease(m_pPBRDFTexture);
 	SafeRelease(m_pPBRDFTextureSRV);
 	SafeRelease(m_pInputLayout);
@@ -212,13 +221,17 @@ void Renderer::Release()
 	SafeRelease(m_pSceneColorTextureVShader);
 	SafeRelease(m_pScenePShader);
 	SafeRelease(m_pSceneVShader);
+	SafeRelease(m_pPSSMConstantBuffer);
+	SafeRelease(m_pLightBuffer);
+	SafeRelease(m_pPBRBuffer);
+	SafeRelease(m_pConstantBuffer);
 	SafeRelease(m_pMinMagMipNearestSampler);
 	SafeRelease(m_pMinMagMipLinearSamplerClamp);
 	SafeRelease(m_pMinMagMipLinearSampler);
 	SafeRelease(m_pEnvironmentPShader);
 	SafeRelease(m_pEnvironmentVShader);
+	SafeRelease(m_pShadowMapGShader);
 	SafeRelease(m_pShadowMapVShader);
-	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pDepthStencilState);
 	SafeRelease(m_pRasterizerStateFront);
 	SafeRelease(m_pRasterizerState);
@@ -232,7 +245,6 @@ void Renderer::Release()
 	SafeRelease(m_pDepthTexture);
 	SafeRelease(m_pBackBufferRTV);
 	SafeRelease(m_pSwapChain);
-	SafeRelease(m_pConstantBuffer);
 
 	delete m_pEnvironment;
 	delete m_pEnvironmentSphere;
@@ -528,6 +540,22 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 	if (SUCCEEDED(hr))
 	{
+		ID3DBlob* pGSBlob = nullptr;
+
+		if (!m_pContext->GetShaderCompiler()->CreateGeometryShader(
+			"shaders/shadowMap.hlsl",
+			&m_pShadowMapGShader,
+			&pGSBlob
+		))
+		{
+			hr = E_FAIL;
+		}
+
+		SafeRelease(pGSBlob);
+	}
+
+	if (SUCCEEDED(hr))
+	{
 		D3D11_INPUT_ELEMENT_DESC inputLayoutDesc[] = {
 			CreateInputElementDesc("POSITION", DXGI_FORMAT_R32G32B32_FLOAT, 0),
 			CreateInputElementDesc("NORMAL", DXGI_FORMAT_R32G32B32_FLOAT, sizeof(DirectX::XMFLOAT3)),
@@ -648,6 +676,7 @@ HRESULT Renderer::CreatePlaneResourses(Mesh*& planeMesh)
 	{
 		mesh->modelMatrix = DirectX::XMMatrixTranslation(0.0f, -2.0f, 0.0f) * DirectX::XMMatrixScaling(90.0f, 1.0f, 90.0f);
 		planeMesh = mesh;
+		planeMesh->hasShadow = false;
 	}
 	else
 	{
@@ -729,6 +758,13 @@ HRESULT Renderer::CreateSceneResources()
 		lightBufferData.SysMemSlicePitch = 0;
 
 		hr = m_pContext->GetDevice()->CreateBuffer(&lightBufferDesc, &lightBufferData, &m_pLightBuffer);
+	}
+
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC pssmConstantBufferDesc = CreateDefaultBufferDesc(sizeof(PSSMConstantBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		hr = m_pContext->GetDevice()->CreateBuffer(&pssmConstantBufferDesc, nullptr, &m_pPSSMConstantBuffer);
 	}
 
 	if (SUCCEEDED(hr))
@@ -889,6 +925,7 @@ Camera* Renderer::GetCamera()
 void Renderer::FillLightBuffer()
 {
 	static LightBuffer lightBuffer = {};
+	memcpy(&lightBuffer.shadowSplitDists, m_pDirectionalLightShadowMap->GetShadowMapSplitDists().data(), sizeof(DirectX::XMFLOAT4));
 	lightBuffer.directionalLight = m_directionalLight;
 	lightBuffer.lightsCount.x = 0;
 	memcpy(lightBuffer.lights, m_lights.data(), sizeof(PointLight) * m_lights.size());
@@ -1064,6 +1101,7 @@ void Renderer::RenderScene()
 	ConstantBuffer constantBuffer = {};
 	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
 	constantBuffer.cameraPosition = m_pCamera->GetPosition();
+	DirectX::XMStoreFloat4(&constantBuffer.cameraDirection, m_pCamera->GetDirection());
 
 	pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 	pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
@@ -1216,14 +1254,44 @@ void Renderer::RenderShadowMap()
 	pContext->ClearState();
 	m_pDirectionalLightShadowMap->Clear();
 
-	DirectX::XMMATRIX vpMatrix = DirectX::XMMatrixIdentity();
-	m_pDirectionalLightShadowMap->CalculateVpMatrixForDirectionalLight(m_directionalLight.GetDirection(), vpMatrix);
-	m_directionalLight.SetVpMatrix(DirectX::XMMatrixTranspose(vpMatrix));
+	//DirectX::XMMATRIX viewMatrix;
+	//m_pDirectionalLightShadowMap->CalculateViewMatrixForDirectionalLight(m_directionalLight.GetDirection(), viewMatrix);
 
-	pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(0));
+	//DirectX::XMMATRIX projMatrix = m_pDirectionalLightShadowMap->CalculatePSSMForDirectioanlLight(
+	//	m_pCamera,
+	//	s_fov, (float)m_windowHeight / m_windowWidth,
+	//	s_near, 20.0f,
+	//	m_directionalLight.GetDirection()
+	//);
 
-	ConstantBuffer constBuffer = {};
-	constBuffer.vpMatrix = m_directionalLight.GetVpMatrix();
+	DirectX::XMMATRIX vpMatrix = m_pDirectionalLightShadowMap->CalculatePSSMForDirectioanlLight(
+		m_pCamera,
+		s_fov, (float)m_windowHeight / m_windowWidth,
+		s_near, m_pDirectionalLightShadowMap->GetShadowMapSplitDists()[0],
+		m_directionalLight.GetDirection()
+	);
+
+	//m_pDirectionalLightShadowMap->CalculateVpMatrixForDirectionalLight(m_directionalLight.GetDirection(), vpMatrix);
+	//m_directionalLight.SetVpMatrix(DirectX::XMMatrixTranspose(vpMatrix));
+
+	//pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(0));
+	pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapDSVArray());
+	
+	DirectX::XMMATRIX vpMatrices[4];
+	m_pDirectionalLightShadowMap->CalculatePSSMVpMatricesForDirectionalLight(
+		m_pCamera,
+		s_fov, (float)m_windowHeight / m_windowWidth,
+		s_near, m_pDirectionalLightShadowMap->GetShadowMapSplitDists()[0],
+		m_directionalLight.GetDirection(),
+		vpMatrices
+	);
+
+	PSSMConstantBuffer pssmConstBuffer = {};
+	for (UINT i = 0; i < m_pDirectionalLightShadowMap->GetShadowMapSplitsNum(); ++i)
+	{
+		m_directionalLight.SetVpMatrix(i, DirectX::XMMatrixTranspose(vpMatrices[i]));
+		pssmConstBuffer.vpMatrices[i] = m_directionalLight.GetVpMatrix(i);
+	}
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftX = 0.0f;
@@ -1248,51 +1316,60 @@ void Renderer::RenderShadowMap()
 	pContext->OMSetDepthStencilState(m_pDepthStencilState, 0);
 
 	pContext->VSSetShader(m_pShadowMapVShader, nullptr, 0);
+	pContext->GSSetShader(m_pShadowMapGShader, nullptr, 0);
 
-	pContext->VSSetConstantBuffers(0, 1, &m_pConstantBuffer);
+	pContext->VSSetConstantBuffers(0, 1, &m_pPSSMConstantBuffer);
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
 
-	//for (UINT splitIdx = 0; splitIdx < m_pDirectionalLightShadowMap->GetShadowMapSplitNum(); ++splitIdx)
+	for (auto& mesh : m_meshes)
 	{
-		//pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(splitIdx));
-
-		for (auto& mesh : m_meshes)
+		if (!mesh->hasShadow)
 		{
-			pContext->IASetVertexBuffers(0, 1, &mesh->pVertexBuffer, &stride, &offset);
-			pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-
-			DirectX::XMStoreFloat4x4(&constBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
-			pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constBuffer, 0, 0);
-
-			pContext->DrawIndexed(mesh->indexCount, 0, 0);
+			continue;
 		}
 
-		D3D_PRIMITIVE_TOPOLOGY cachedTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+		pContext->IASetVertexBuffers(0, 1, &mesh->pVertexBuffer, &stride, &offset);
+		pContext->IASetIndexBuffer(mesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
-		for (auto* pModel : m_models)
+		DirectX::XMStoreFloat4x4(&pssmConstBuffer.modelMatrix, DirectX::XMMatrixTranspose(mesh->modelMatrix));
+		pContext->UpdateSubresource(m_pPSSMConstantBuffer, 0, nullptr, &pssmConstBuffer, 0, 0);
+
+		pContext->DrawIndexedInstanced(
+			mesh->indexCount,
+			m_pDirectionalLightShadowMap->GetShadowMapSplitsNum(),
+			0, 0, 0
+		);
+	}
+
+	D3D_PRIMITIVE_TOPOLOGY cachedTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+
+	for (auto* pModel : m_models)
+	{
+		for (UINT primitiveIdx = 0; primitiveIdx < pModel->PrimitiveNum(); ++primitiveIdx)
 		{
-			for (UINT primitiveIdx = 0; primitiveIdx < pModel->PrimitiveNum(); ++primitiveIdx)
+			const Model::Primitive& primitive = pModel->GetPrimitive(primitiveIdx);
+
+			if (cachedTopology != primitive.topology)
 			{
-				const Model::Primitive& primitive = pModel->GetPrimitive(primitiveIdx);
-
-				if (cachedTopology != primitive.topology)
-				{
-					cachedTopology = primitive.topology;
-					pContext->IASetPrimitiveTopology(primitive.topology);
-				}
-
-				ID3D11Buffer* vertexBuffers[] = { primitive.pMesh->pVertexBuffer };
-
-				pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
-				pContext->IASetIndexBuffer(primitive.pMesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
-
-				DirectX::XMStoreFloat4x4(&constBuffer.modelMatrix, DirectX::XMMatrixTranspose(primitive.pMesh->modelMatrix));
-				pContext->UpdateSubresource(m_pConstantBuffer, 0, nullptr, &constBuffer, 0, 0);
-
-				pContext->DrawIndexed(primitive.pMesh->indexCount, 0, 0);
+				cachedTopology = primitive.topology;
+				pContext->IASetPrimitiveTopology(primitive.topology);
 			}
+
+			ID3D11Buffer* vertexBuffers[] = { primitive.pMesh->pVertexBuffer };
+
+			pContext->IASetVertexBuffers(0, 1, vertexBuffers, &stride, &offset);
+			pContext->IASetIndexBuffer(primitive.pMesh->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+
+			DirectX::XMStoreFloat4x4(&pssmConstBuffer.modelMatrix, DirectX::XMMatrixTranspose(primitive.pMesh->modelMatrix));
+			pContext->UpdateSubresource(m_pPSSMConstantBuffer, 0, nullptr, &pssmConstBuffer, 0, 0);
+
+			pContext->DrawIndexedInstanced(
+				primitive.pMesh->indexCount,
+				m_pDirectionalLightShadowMap->GetShadowMapSplitsNum(),
+				0, 0, 0
+			);
 		}
 	}
 

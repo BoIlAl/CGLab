@@ -12,6 +12,10 @@ public:
     DirectX::XMMATRIX GetViewMatrixRH() const;
     DirectX::XMFLOAT4 GetPosition() const;
 
+    DirectX::XMVECTOR GetDirection() const;
+    DirectX::XMVECTOR GetUp() const;
+    DirectX::XMVECTOR GetRight() const;
+
     void MoveVertical(float delta);
     void MoveHorizontal(float delta);
     void MovePerpendicular(float delta);
