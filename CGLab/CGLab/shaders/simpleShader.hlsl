@@ -7,7 +7,7 @@ TextureCube DiffuseIrradianceMap    : register(t0);
 TextureCube EnvMap                  : register(t1);
 Texture2D BRDFLut                   : register(t2);
 
-Texture2D ShadowMap                 : register(t20);
+Texture2DArray ShadowMapArray       : register(t20);
 
 cbuffer ConstantBuffer : register(b0)
 {
@@ -50,9 +50,16 @@ cbuffer PBRParams : register(b2)
     uint4 pbrMode; // r - mode : 1 - Normal Distribution, 2 - Geometry, 3 - Fresnel, Overwise - All
 };
 
+cbuffer DebugBuffer : register(b3)
+{
+    uint4 debugParams; // r - show PSSM splits
+};
+
+
 SamplerState MinMagMipLinearSampler             : register(s0);
 SamplerState MinMagLinearSamplerClamp           : register(s1);
-SamplerComparisonState MinMagMipNearestSampler  : register(s2);
+SamplerState MinMagMipNearestSampler            : register(s2);
+SamplerComparisonState ShadowMapSampler         : register(s3);
 
 
 Texture2D BaseColorTexture          : register(t10);
@@ -186,15 +193,47 @@ float3 BRDF(
     return max(Lambert * (1 - metalness) + CookTorrance, float3(0.0f, 0.0f, 0.0f));
 }
 
-//float SampleShadowMap(float3 position)
-//{
-//    float4 lightProjPos = mul(float4(position, 1.0f), directionalLight.dirLightVpMatrix);
-//    float2 texCoord = lightProjPos.xy * float2(0.5, -0.5) + float2(0.5f, 0.5f);
+float SampleShadowMap(float3 position, out float3 debugSplitsColor)
+{
+    float dist = dot(position - cameraPosition.xyz, cameraDirection);
+    debugSplitsColor = float3(0.0f, 0.0f, 0.0f);
+    
+    uint splitIdx = 0u;
+        
+    if (dist < shadowSplitDists.x)
+    {
+        debugSplitsColor.r += 0.25f;
+        splitIdx = 0u;
+    }
+    else if (dist < shadowSplitDists.y)
+    {
+        debugSplitsColor.g += 0.25f;
+        splitIdx = 1u;
+    }
+    else if (dist < shadowSplitDists.z)
+    {
+        debugSplitsColor.b += 0.25f;
+        splitIdx = 2u;
+    }
+    else
+    {
+        debugSplitsColor.rg += 0.25f;
+        splitIdx = 3u;
+    }
+    
+    float4 lightProjPos = mul(float4(position, 1.0f), directionalLight.dirLightVpMatrix[splitIdx]);
+    float2 texCoord = (lightProjPos.xy / lightProjPos.w) * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+    
+    float shadowDepth = ShadowMapArray.Sample(MinMagMipNearestSampler, float3(texCoord, splitIdx)).r;
 
-//    float depth = ShadowMap.Sample(MinMagMipNearestSampler, texCoord);
-
-//    return depth;
-//}
+    if (lightProjPos.z > shadowDepth)
+    {
+        return 0.0f;
+    }
+    
+    float shadowValue = ShadowMapArray.SampleCmp(ShadowMapSampler, float3(texCoord, splitIdx), lightProjPos.z).r;
+    return shadowValue;
+}
 
 
 PSOut PS(VSOut input)
@@ -237,33 +276,12 @@ PSOut PS(VSOut input)
         float3 lightImpact = directionalLight.color.rgb;
         lightImpact *= saturate(dot(dirToLight, normal));
         
-        float4 lightProjPos = mul(float4(input.worldPosition.xyz, 1.0f), directionalLight.dirLightVpMatrix[0]);
-        float2 texCoord = lightProjPos.xy * float2(0.5, -0.5) + float2(0.5f, 0.5f);
+        float3 splitColor = float3(0.0f, 0.0f, 0.0f);
+        float shadowValue = SampleShadowMap(input.worldPosition.xyz, splitColor);
         
-        float dist = dot(input.worldPosition.xyz - cameraPosition.xyz, cameraDirection);
-        
-        if (dist < shadowSplitDists.x)
+        if (shadowValue != 0.0f)
         {
-            resultColor.r += 1.0f;
-        }
-        else if (dist < shadowSplitDists.y)
-        {
-            resultColor.g += 1.0f;
-        }
-        else if (dist < shadowSplitDists.z)
-        {
-            resultColor.b += 1.0f;
-        }
-        else if (dist < shadowSplitDists.w)
-        {
-            resultColor.rg += 1.0f;
-        }
-        
-        float depth = ShadowMap.SampleCmp(MinMagMipNearestSampler, texCoord, lightProjPos.z);
-        
-        if (lightProjPos.z <= depth)
-        {
-            resultColor += lightImpact * BRDF(
+            resultColor += shadowValue * lightImpact * BRDF(
                 input.worldPosition.xyz,
                 dirToLight,
                 normal,
@@ -271,6 +289,11 @@ PSOut PS(VSOut input)
                 roughness,
                 metalness
             );
+        }
+        
+        if (debugParams.r != 0u)
+        {
+            resultColor += splitColor;
         }
     }
     

@@ -23,25 +23,16 @@ public:
 
 	~ShadowMap();
 
-	ID3D11DepthStencilView* GetShadowMapSplitDSV(UINT splitIdx) const;
 	ID3D11DepthStencilView* GetShadowMapDSVArray() const;
-	ID3D11ShaderResourceView* GetShadowMapSRV() const;
+	ID3D11ShaderResourceView* GetShadowMapSRVArray() const;
 
-	inline const std::vector<float>& GetShadowMapSplitDists() const { return m_splitDists; }
+	inline const std::vector<float>& GetShadowMapSplitDists() const { return m_splitsDists; }
 
 	void CalculateProjMatrixForDirectionalLight(const Box& size, DirectX::XMMATRIX& projMatrix) const;
 	void CalculateViewMatrixForDirectionalLight(
 		const DirectX::XMFLOAT3& direction,
 		float centerX, float centerY, float centerZ,
 		DirectX::XMMATRIX& viewMatrix
-	) const;
-	void CalculateVpMatrixForDirectionalLight(const DirectX::XMFLOAT3& direction, DirectX::XMMATRIX& vpMatrix) const;
-
-	DirectX::XMMATRIX CalculatePSSMForDirectioanlLight(
-		const Camera* pCamera,
-		float fov, float aspectRation,
-		float nearPlane, float farPlane,
-		const DirectX::XMFLOAT3& direction
 	) const;
 
 	void CalculatePSSMVpMatricesForDirectionalLight(
@@ -50,18 +41,21 @@ public:
 		float cameraNearPlane, float cameraFarPlane,
 		const DirectX::XMFLOAT3& lightDirection,
 		DirectX::XMMATRIX* pVpMatrices
-	) const;
+	);
 
-	void Clear();
+	void Clear(RendererContext* pContext);
 
 	inline UINT GetShadowMapSplitsNum() const { return m_splitsNum; }
 	inline UINT GetShadowMapTextureSize() const { return m_size; }
 
-private:
-	ShadowMap(RendererContext* pContext, UINT splitNum, UINT size);
+	inline float GetLogUniformSplitsInterpolationValue() const { return m_lambda; }
+	void SetLogUniformSplitsInterpolationValue(float lambda);
 
-	bool Init();
-	void CalculateSplits();
+private:
+	ShadowMap(UINT splitNum, UINT size);
+
+	bool Init(RendererContext* pContext);
+	void CalculateSplitsDists(float nearPlane, float farPlane);
 
 	void BuildProjMatrixForDirectionalLight(
 		const DirectX::XMFLOAT3& lightDirection,
@@ -71,25 +65,13 @@ private:
 	) const;
 
 private:
-	static constexpr float s_near = 0.1f;
-	static constexpr float s_far = 100.0f;
-
-private:
-	RendererContext* m_pContext;
-
-	ID3D11Texture2D* m_pShadowMap;
-	ID3D11DepthStencilView* m_pShadowMapDSV;
-	ID3D11ShaderResourceView* m_pShadowMapSRV;
-
 	ID3D11Texture2D* m_pPSShadowMap;
-	std::vector<ID3D11DepthStencilView*> m_PSShadowMapDSVs;
 	ID3D11DepthStencilView* m_pPSShadowMapDSV;
 	ID3D11ShaderResourceView* m_pPSShadowMapSRV;
 
 	UINT m_splitsNum;
-	std::vector<float> m_splitDists;
+	std::vector<float> m_splitsDists;
 	UINT m_size;
-
-
+	float m_lambda;
 };
 

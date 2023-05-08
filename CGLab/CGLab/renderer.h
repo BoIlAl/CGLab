@@ -107,6 +107,7 @@ private:
 	ID3D11SamplerState* m_pMinMagMipLinearSampler;
 	ID3D11SamplerState* m_pMinMagMipLinearSamplerClamp;
 	ID3D11SamplerState* m_pMinMagMipNearestSampler;
+	ID3D11SamplerState* m_pShadowMapSampler;
 
 	std::vector<Mesh*> m_meshes;
 	Mesh* m_pEnvironmentSphere;
@@ -115,6 +116,7 @@ private:
 	ID3D11Buffer* m_pPBRBuffer;
 	ID3D11Buffer* m_pLightBuffer;
 	ID3D11Buffer* m_pPSSMConstantBuffer;
+	ID3D11Buffer* m_pDebugParamsBuffer;
 
 	ID3D11VertexShader* m_pSceneVShader;
 	ID3D11PixelShader* m_pScenePShader;
@@ -155,6 +157,8 @@ private:
 	Bloom* m_pBloom;
 
 	ShadowMap* m_pDirectionalLightShadowMap;
+	bool m_showPSSMSplits;
+	float m_cameraFarPlaneForPSSM;
 
 	std::vector<PointLight> m_lights;
 	DirectionalLight m_directionalLight;

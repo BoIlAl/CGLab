@@ -68,6 +68,8 @@ bool LoadShaderSource(
 	}
 
 	shaderSource.insert(0, addDefines);
+
+	return true;
 }
 
 

@@ -33,7 +33,7 @@ struct ConstantBuffer
 struct PSSMConstantBuffer
 {
 	DirectX::XMFLOAT4X4 modelMatrix;
-	DirectX::XMFLOAT4X4 vpMatrices[4];
+	DirectX::XMFLOAT4X4 vpMatrices[PSSMMaxSplitsNum];
 };
 
 struct LightBuffer
@@ -43,6 +43,11 @@ struct LightBuffer
 
 	DirectX::XMUINT4 lightsCount; // r
 	PointLight lights[MaxLightNum];
+};
+
+struct DebugBuffer
+{
+	DirectX::XMUINT4 debugParams; // r - show PSSM splits
 };
 
 struct PBRBuffer
@@ -107,9 +112,11 @@ Renderer::Renderer()
 	, m_pPBRBuffer(nullptr)
 	, m_pLightBuffer(nullptr)
 	, m_pPSSMConstantBuffer(nullptr)
+	, m_pDebugParamsBuffer(nullptr)
 	, m_pMinMagMipLinearSampler(nullptr)
 	, m_pMinMagMipLinearSamplerClamp(nullptr)
 	, m_pMinMagMipNearestSampler(nullptr)
+	, m_pShadowMapSampler(nullptr)
 	, m_pPBRDFTexture(nullptr)
 	, m_pPBRDFTextureSRV(nullptr)
 	, m_pEnvironment(nullptr)
@@ -124,6 +131,8 @@ Renderer::Renderer()
 	, m_pToneMapping(nullptr)
 	, m_pBloom(nullptr)
 	, m_pDirectionalLightShadowMap(nullptr)
+	, m_showPSSMSplits(false)
+	, m_cameraFarPlaneForPSSM(200.0f)
 {}
 
 Renderer::~Renderer()
@@ -221,10 +230,12 @@ void Renderer::Release()
 	SafeRelease(m_pSceneColorTextureVShader);
 	SafeRelease(m_pScenePShader);
 	SafeRelease(m_pSceneVShader);
+	SafeRelease(m_pDebugParamsBuffer);
 	SafeRelease(m_pPSSMConstantBuffer);
 	SafeRelease(m_pLightBuffer);
 	SafeRelease(m_pPBRBuffer);
 	SafeRelease(m_pConstantBuffer);
+	SafeRelease(m_pShadowMapSampler);
 	SafeRelease(m_pMinMagMipNearestSampler);
 	SafeRelease(m_pMinMagMipLinearSamplerClamp);
 	SafeRelease(m_pMinMagMipLinearSampler);
@@ -447,7 +458,14 @@ HRESULT Renderer::CreatePipelineStateObjects()
 
 		if (SUCCEEDED(hr))
 		{
-			samplerDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_MIP_POINT;
+			samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+
+			hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagMipNearestSampler);
+		}
+
+		if (SUCCEEDED(hr))
+		{
+			samplerDesc.Filter = D3D11_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT;
 			samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
 			samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
 			samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
@@ -455,7 +473,7 @@ HRESULT Renderer::CreatePipelineStateObjects()
 			samplerDesc.BorderColor[2] = samplerDesc.BorderColor[3] = 1.0f;
 			samplerDesc.ComparisonFunc = D3D11_COMPARISON_LESS;
 
-			hr = pDevice->CreateSamplerState(&samplerDesc, &m_pMinMagMipNearestSampler);
+			hr = pDevice->CreateSamplerState(&samplerDesc, &m_pShadowMapSampler);
 		}
 	}
 
@@ -766,6 +784,21 @@ HRESULT Renderer::CreateSceneResources()
 
 		hr = m_pContext->GetDevice()->CreateBuffer(&pssmConstantBufferDesc, nullptr, &m_pPSSMConstantBuffer);
 	}
+	
+	if (SUCCEEDED(hr))
+	{
+		D3D11_BUFFER_DESC debugParamsBufferDesc = CreateDefaultBufferDesc(sizeof(DebugBuffer), D3D11_BIND_CONSTANT_BUFFER);
+
+		DebugBuffer debugBuffer = {};
+		debugBuffer.debugParams.x = m_showPSSMSplits;
+
+		D3D11_SUBRESOURCE_DATA debugParamsBufferData = {};
+		debugParamsBufferData.pSysMem = &debugBuffer;
+		debugParamsBufferData.SysMemPitch = 0;
+		debugParamsBufferData.SysMemSlicePitch = 0;
+
+		hr = m_pContext->GetDevice()->CreateBuffer(&debugParamsBufferDesc, &debugParamsBufferData, &m_pDebugParamsBuffer);
+	}
 
 	if (SUCCEEDED(hr))
 	{
@@ -799,7 +832,7 @@ HRESULT Renderer::CreateSceneResources()
 
 	if (SUCCEEDED(hr))
 	{
-		m_pDirectionalLightShadowMap = ShadowMap::CreateShadowMap(m_pContext, 4u, 2048u);
+		m_pDirectionalLightShadowMap = ShadowMap::CreateShadowMap(m_pContext, PSSMMaxSplitsNum, 2048u);
 
 		if (m_pDirectionalLightShadowMap == nullptr)
 		{
@@ -997,6 +1030,32 @@ void Renderer::RenderImGui()
 	
 	ImGui::EndChild();
 
+	{
+		ImGui::BeginChild("PSSM setting", ImVec2(0, 100), true);
+		ImGui::Text("PSSM setting:");
+
+		float lamda = m_pDirectionalLightShadowMap->GetLogUniformSplitsInterpolationValue();
+		bool showPSSMSplits = m_showPSSMSplits;
+		ImGui::Checkbox("Show PSSM splits", &showPSSMSplits);
+		ImGui::SliderFloat("Log / Uniform", &lamda, 0.0f, 1.0f);
+
+		m_pDirectionalLightShadowMap->SetLogUniformSplitsInterpolationValue(lamda);
+
+		ImGui::SliderFloat("Camera far plane", &m_cameraFarPlaneForPSSM, s_near, s_far);
+
+		ImGui::EndChild();
+
+		if (m_showPSSMSplits != showPSSMSplits)
+		{
+			DebugBuffer debugBuffer = {};
+			debugBuffer.debugParams.x = showPSSMSplits;
+
+			m_pContext->GetContext()->UpdateSubresource(m_pDebugParamsBuffer, 0, 0, &debugBuffer, 0, 0);
+
+			m_showPSSMSplits = showPSSMSplits;
+		}
+	}
+
 	ImGui::End();
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
@@ -1092,11 +1151,18 @@ void Renderer::RenderScene()
 	{
 		m_pMinMagMipLinearSampler,
 		m_pMinMagMipLinearSamplerClamp,
-		m_pMinMagMipNearestSampler
+		m_pMinMagMipNearestSampler,
+		m_pShadowMapSampler
 	};
 	pContext->PSSetSamplers(0, _countof(samplers), samplers);
 
-	ID3D11Buffer* constantBuffers[] = { m_pConstantBuffer, m_pLightBuffer, m_pPBRBuffer };
+	ID3D11Buffer* constantBuffers[] =
+	{ 
+		m_pConstantBuffer,
+		m_pLightBuffer,
+		m_pPBRBuffer,
+		m_pDebugParamsBuffer
+	};
 
 	ConstantBuffer constantBuffer = {};
 	DirectX::XMStoreFloat4x4(&constantBuffer.vpMatrix, DirectX::XMMatrixTranspose(m_pCamera->GetViewMatrix() * m_projMatrix));
@@ -1106,7 +1172,7 @@ void Renderer::RenderScene()
 	pContext->VSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 	pContext->PSSetConstantBuffers(0, _countof(constantBuffers), constantBuffers);
 
-	ID3D11ShaderResourceView* shadowMapSRVs[] = { m_pDirectionalLightShadowMap->GetShadowMapSRV() };
+	ID3D11ShaderResourceView* shadowMapSRVs[] = { m_pDirectionalLightShadowMap->GetShadowMapSRVArray() };
 	pContext->PSSetShaderResources(20, _countof(shadowMapSRVs), shadowMapSRVs);
 
 	for (auto& mesh : m_meshes)
@@ -1252,36 +1318,13 @@ void Renderer::RenderShadowMap()
 	m_pContext->BeginEvent(L"Shadow Map");
 
 	pContext->ClearState();
-	m_pDirectionalLightShadowMap->Clear();
+	m_pDirectionalLightShadowMap->Clear(m_pContext);
 
-	//DirectX::XMMATRIX viewMatrix;
-	//m_pDirectionalLightShadowMap->CalculateViewMatrixForDirectionalLight(m_directionalLight.GetDirection(), viewMatrix);
-
-	//DirectX::XMMATRIX projMatrix = m_pDirectionalLightShadowMap->CalculatePSSMForDirectioanlLight(
-	//	m_pCamera,
-	//	s_fov, (float)m_windowHeight / m_windowWidth,
-	//	s_near, 20.0f,
-	//	m_directionalLight.GetDirection()
-	//);
-
-	DirectX::XMMATRIX vpMatrix = m_pDirectionalLightShadowMap->CalculatePSSMForDirectioanlLight(
-		m_pCamera,
-		s_fov, (float)m_windowHeight / m_windowWidth,
-		s_near, m_pDirectionalLightShadowMap->GetShadowMapSplitDists()[0],
-		m_directionalLight.GetDirection()
-	);
-
-	//m_pDirectionalLightShadowMap->CalculateVpMatrixForDirectionalLight(m_directionalLight.GetDirection(), vpMatrix);
-	//m_directionalLight.SetVpMatrix(DirectX::XMMatrixTranspose(vpMatrix));
-
-	//pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapSplitDSV(0));
-	pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapDSVArray());
-	
-	DirectX::XMMATRIX vpMatrices[4];
+	DirectX::XMMATRIX vpMatrices[PSSMMaxSplitsNum];
 	m_pDirectionalLightShadowMap->CalculatePSSMVpMatricesForDirectionalLight(
 		m_pCamera,
 		s_fov, (float)m_windowHeight / m_windowWidth,
-		s_near, m_pDirectionalLightShadowMap->GetShadowMapSplitDists()[0],
+		s_near, m_cameraFarPlaneForPSSM,
 		m_directionalLight.GetDirection(),
 		vpMatrices
 	);
@@ -1292,6 +1335,8 @@ void Renderer::RenderShadowMap()
 		m_directionalLight.SetVpMatrix(i, DirectX::XMMatrixTranspose(vpMatrices[i]));
 		pssmConstBuffer.vpMatrices[i] = m_directionalLight.GetVpMatrix(i);
 	}
+
+	pContext->OMSetRenderTargets(0, nullptr, m_pDirectionalLightShadowMap->GetShadowMapDSVArray());
 
 	D3D11_VIEWPORT viewport = {};
 	viewport.TopLeftX = 0.0f;

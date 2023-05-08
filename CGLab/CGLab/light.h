@@ -1,6 +1,7 @@
 #pragma once
 
 #include "framework.h"
+#include "common.h"
 
 #include <DirectXMath.h>
 
@@ -41,5 +42,5 @@ private:
 	DirectX::XMFLOAT4 m_direction;
 	DirectX::XMFLOAT4 m_color;
 
-	DirectX::XMFLOAT4X4 m_vpMatrix[4];
+	DirectX::XMFLOAT4X4 m_vpMatrix[PSSMMaxSplitsNum];
 };

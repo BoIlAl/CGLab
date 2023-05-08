@@ -5,9 +5,9 @@
 
 ShadowMap* ShadowMap::CreateShadowMap(RendererContext* pContext, UINT splitNum, UINT size)
 {
-	ShadowMap* pShadowMap = new ShadowMap(pContext, splitNum, size);
+	ShadowMap* pShadowMap = new ShadowMap(splitNum, size);
 
-	if (pShadowMap->Init())
+	if (pShadowMap->Init(pContext))
 	{
 		return pShadowMap;
 	}
@@ -16,68 +16,25 @@ ShadowMap* ShadowMap::CreateShadowMap(RendererContext* pContext, UINT splitNum, 
 	return nullptr;
 }
 
-ShadowMap::ShadowMap(RendererContext* pContext, UINT splitNum, UINT size)
-	: m_pContext(pContext)
-	, m_pShadowMap(nullptr)
-	, m_pShadowMapDSV(nullptr)
-	, m_pShadowMapSRV(nullptr)
-	, m_pPSShadowMap(nullptr)
+ShadowMap::ShadowMap(UINT splitNum, UINT size)
+	: m_pPSShadowMap(nullptr)
 	, m_pPSShadowMapDSV(nullptr)
 	, m_pPSShadowMapSRV(nullptr)
 	, m_splitsNum(splitNum)
 	, m_size(size)
-{
-	CalculateSplits();
-}
+	, m_lambda(0.5f)
+{}
 
 ShadowMap::~ShadowMap()
 {
 	SafeRelease(m_pPSShadowMapSRV);
 	SafeRelease(m_pPSShadowMapDSV);
-	for (auto& pDSV : m_PSShadowMapDSVs)
-	{
-		SafeRelease(pDSV);
-	}
 	SafeRelease(m_pPSShadowMap);
-
-	SafeRelease(m_pShadowMapSRV);
-	SafeRelease(m_pShadowMapDSV);
-	SafeRelease(m_pShadowMap);
 }
 
-bool ShadowMap::Init()
+bool ShadowMap::Init(RendererContext* pContext)
 {
-	ID3D11Device* pDevice = m_pContext->GetDevice();
-
-	D3D11_TEXTURE2D_DESC shadowMapDesc = CreateDefaultTexture2DDesc(
-		DXGI_FORMAT_R24G8_TYPELESS,
-		m_size, m_size,
-		D3D11_BIND_DEPTH_STENCIL | D3D11_BIND_SHADER_RESOURCE
-	);
-
-	HRESULT hr = pDevice->CreateTexture2D(&shadowMapDesc, nullptr, &m_pShadowMap);
-
-	if (SUCCEEDED(hr))
-	{
-		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-		dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-		dsvDesc.Texture2D.MipSlice = 0;
-		dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-		dsvDesc.Flags = 0;
-
-		hr = pDevice->CreateDepthStencilView(m_pShadowMap, &dsvDesc, &m_pShadowMapDSV);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-		srvDesc.Texture2D.MipLevels = 1;
-		srvDesc.Texture2D.MostDetailedMip = 0;
-		srvDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
-
-		hr = pDevice->CreateShaderResourceView(m_pShadowMap, &srvDesc, &m_pShadowMapSRV);
-	}
+	ID3D11Device* pDevice = pContext->GetDevice();
 
 
 	D3D11_TEXTURE2D_DESC psShadowMapDesc = CreateDefaultTexture2DDesc(
@@ -87,29 +44,7 @@ bool ShadowMap::Init()
 	);
 	psShadowMapDesc.ArraySize = m_splitsNum;
 
-	if (SUCCEEDED(hr))
-	{
-		hr = pDevice->CreateTexture2D(&psShadowMapDesc, nullptr, &m_pPSShadowMap);
-	}
-
-	if (SUCCEEDED(hr))
-	{
-		D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
-		dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
-		dsvDesc.Texture2DArray.ArraySize = 1;
-		dsvDesc.Texture2DArray.MipSlice = 0;
-		dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-		dsvDesc.Flags = 0;
-
-		m_PSShadowMapDSVs.resize(m_splitsNum);
-
-		for (UINT i = 0; i < m_splitsNum && SUCCEEDED(hr); ++i)
-		{
-			dsvDesc.Texture2DArray.FirstArraySlice = i;
-
-			hr = pDevice->CreateDepthStencilView(m_pPSShadowMap, &dsvDesc, &m_PSShadowMapDSVs[i]);
-		}
-	}
+	HRESULT hr = pDevice->CreateTexture2D(&psShadowMapDesc, nullptr, &m_pPSShadowMap);
 
 	if (SUCCEEDED(hr))
 	{
@@ -141,48 +76,15 @@ bool ShadowMap::Init()
 }
 
 
-ID3D11DepthStencilView* ShadowMap::GetShadowMapSplitDSV(UINT splitIdx) const
-{
-	return m_pShadowMapDSV;
-
-	if (m_splitsNum < splitIdx)
-	{
-		return nullptr;
-	}
-
-	return m_PSShadowMapDSVs[splitIdx];
-}
-
-
 ID3D11DepthStencilView* ShadowMap::GetShadowMapDSVArray() const
 {
 	return m_pPSShadowMapDSV;
 }
 
 
-ID3D11ShaderResourceView* ShadowMap::GetShadowMapSRV() const
+ID3D11ShaderResourceView* ShadowMap::GetShadowMapSRVArray() const
 {
-	return m_pShadowMapSRV;
-}
-
-
-void ShadowMap::CalculateVpMatrixForDirectionalLight(const DirectX::XMFLOAT3& direction, DirectX::XMMATRIX& vpMatrix) const
-{
-	DirectX::XMMATRIX viewMatrix = DirectX::XMMatrixIdentity();
-	//CalculateViewMatrixForDirectionalLight(direction, viewMatrix);
-
-	Box box = {};
-	box.top = 10.0f;
-	box.bottom = -10.0f;
-	box.right = 10.0f;
-	box.left = -10.0f;
-	box.nearPlane = 0.1f;
-	box.farPlane = 1000.0f;
-
-	DirectX::XMMATRIX projMatrix;
-	CalculateProjMatrixForDirectionalLight(box, projMatrix);
-
-	vpMatrix = viewMatrix * projMatrix;
+	return m_pPSShadowMapSRV;
 }
 
 
@@ -228,103 +130,16 @@ void ShadowMap::CalculateViewMatrixForDirectionalLight(
 }
 
 
-DirectX::XMMATRIX ShadowMap::CalculatePSSMForDirectioanlLight(
-	const Camera* pCamera,
-	float fov, float aspectRation,
-	float nearPlane, float farPlane,
-	const DirectX::XMFLOAT3& direction
-) const
-{
-	DirectX::XMFLOAT4 posFloat4 = pCamera->GetPosition();
-	DirectX::XMVECTOR pos = { posFloat4.x, posFloat4.y, posFloat4.z, posFloat4.w };
-
-	DirectX::XMVECTOR cameraDir = pCamera->GetDirection();
-	DirectX::XMVECTOR cameraUp = pCamera->GetUp();
-	DirectX::XMVECTOR cameraRight = pCamera->GetRight();
-
-	UINT pointIdx = 0;
-	std::vector<DirectX::XMVECTOR> points;
-	points.resize(8);
-
-	float borderZ[2] = { nearPlane, farPlane };
-	std::pair<float, float> borderXYSigns[4] = { { -1.0f, 1.0f }, { 1.0f, 1.0f }, { -1.0f, -1.0f }, { 1.0f, -1.0f } };
-
-	for (UINT i = 0; i < _countof(borderZ); ++i)
-	{
-		float width = borderZ[i] * tanf(fov * 0.5f);
-		float height = width * aspectRation;
-		DirectX::XMVECTOR dirScaleBorderZ = DirectX::XMVectorScale(cameraDir, borderZ[i]);
-
-		for (UINT j = 0; j < _countof(borderXYSigns); ++j)
-		{
-			const auto& signs = borderXYSigns[j];
-
-			points[pointIdx++] = DirectX::XMVectorAdd(
-				DirectX::XMVectorAdd(
-					DirectX::XMVectorAdd(pos, dirScaleBorderZ), DirectX::XMVectorScale(cameraRight, signs.first * width)
-				),
-				DirectX::XMVectorScale(cameraUp, signs.second * height)
-			);
-		}
-	}
-
-	Box box1 = Box(points);
-
-	float centerX = 0.5f * (box1.right + box1.left);
-	float centerY = 0.5f * (box1.top + box1.bottom);
-	float centerZ = 0.5f * (box1.farPlane + box1.nearPlane);
-
-	//DirectX::XMVECTOR ligthPos = { centerX + -direction.x * 4.0f, centerY + -direction.y * 4.0f, centerZ + -direction.z * 4.0f, 0.0f };
-	//DirectX::XMVECTOR lightDir = { direction.x, direction.y, direction.z, 0.0f };
-	//lightDir = DirectX::XMVector3Normalize(lightDir);
-
-	//DirectX::XMVECTOR lightUp = lightDir.m128_f32[0] > 0.999f
-	//	? DirectX::XMVECTOR({ 0.0f, 0.0f, 1.0f, 0.0f })
-	//	: DirectX::XMVECTOR({ 1.0f, 0.0f, 0.0f, 0.0f });
-
-	//DirectX::XMVECTOR lightRight = DirectX::XMVector3Normalize(DirectX::XMVector3Cross(lightDir, lightUp));
-	//lightUp = DirectX::XMVector3Normalize(DirectX::XMVector3Cross(lightRight, lightDir));
-
-	//Box box = {};
-	//box.left = box.bottom = box.nearPlane = FLT_MAX;
-	//box.right = box.top = box.farPlane = -FLT_MAX;
-
-	//for (UINT i = 0; i < points.size(); ++i)
-	//{
-	//	const DirectX::XMVECTOR& sub = DirectX::XMVectorSubtract(points[i], ligthPos);
-
-	//	float x = DirectX::XMVector3Dot(sub, lightRight).m128_f32[0];
-	//	float y = DirectX::XMVector3Dot(sub, lightUp).m128_f32[0];
-	//	float z = DirectX::XMVector3Dot(sub, lightDir).m128_f32[0];
-
-	//	box.left = min(box.left, x);
-	//	box.bottom = min(box.bottom, y);
-	//	box.nearPlane = min(box.nearPlane, z);
-
-	//	box.right = max(box.right, x);
-	//	box.top = max(box.top, y);
-	//	box.farPlane = max(box.farPlane, z);
-	//}
-
-	DirectX::XMMATRIX projMatrix;
-	//CalculateProjMatrixForDirectionalLight(box, projMatrix);
-	BuildProjMatrixForDirectionalLight(direction, points, centerX, centerY, centerZ, projMatrix);
-
-	DirectX::XMMATRIX viewMatrix;
-	CalculateViewMatrixForDirectionalLight(direction, centerX, centerY, centerZ, viewMatrix);
-
-	return viewMatrix * projMatrix;
-}
-
-
 void ShadowMap::CalculatePSSMVpMatricesForDirectionalLight(
 	const Camera* pCamera,
 	float cameraFov, float cameraAspectRatio,
 	float cameraNearPlane, float cameraFarPlane,
 	const DirectX::XMFLOAT3& lightDirection,
 	DirectX::XMMATRIX* pVpMatrices
-) const
+)
 {
+	CalculateSplitsDists(cameraNearPlane, cameraFarPlane);
+
 	DirectX::XMFLOAT4 posFloat4 = pCamera->GetPosition();
 	DirectX::XMVECTOR pos = { posFloat4.x, posFloat4.y, posFloat4.z, posFloat4.w };
 
@@ -362,11 +177,8 @@ void ShadowMap::CalculatePSSMVpMatricesForDirectionalLight(
 
 	for (UINT splitIdx = 0; splitIdx < m_splitsNum; ++splitIdx)
 	{
-		float nearPlane = s_near;
-		float farPlane = m_splitDists[splitIdx];
-
 		std::vector<DirectX::XMVECTOR> points;
-		buildCameraBox(nearPlane, farPlane, points);
+		buildCameraBox(cameraNearPlane, m_splitsDists[splitIdx], points);
 
 		Box cameraBox = Box(points);
 		float centerX = 0.5f * (cameraBox.left + cameraBox.right);
@@ -435,29 +247,35 @@ void ShadowMap::BuildProjMatrixForDirectionalLight(
 }
 
 
-void ShadowMap::Clear()
+void ShadowMap::Clear(RendererContext* pContext)
 {
-	m_pContext->GetContext()->ClearDepthStencilView(m_pShadowMapDSV, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0u);
-
-	for (auto& pDSV : m_PSShadowMapDSVs)
-	{
-		m_pContext->GetContext()->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH, 1.0f, 0u);
-	}
+	pContext->GetContext()->ClearDepthStencilView(m_pPSShadowMapDSV, D3D11_CLEAR_DEPTH, 1.0f, 0u);
 }
 
 
-void ShadowMap::CalculateSplits()
+void ShadowMap::SetLogUniformSplitsInterpolationValue(float lambda)
 {
-	float farDivNear = s_far / s_near;
+	lambda = max(0.0f, lambda);
+	lambda = min(1.0f, lambda);
+
+	m_lambda = lambda;
+}
+
+
+void ShadowMap::CalculateSplitsDists(float nearPlane, float farPlane)
+{
+	float farDivNear = farPlane / nearPlane;
 	float invSplitNum = 1.0f / m_splitsNum;
+
+	m_splitsDists.resize(m_splitsNum);
 
 	for (UINT i = 1; i <= m_splitsNum; ++i)
 	{
-		float ciLog = s_near * std::pow(farDivNear, i * invSplitNum);
-		float ciUni = s_near + (s_far - s_near) * (i * invSplitNum);
-		float ci = 0.5f * ciLog + 0.5f * ciUni;
+		float ciLog = nearPlane * std::pow(farDivNear, i * invSplitNum);
+		float ciUni = nearPlane + (farPlane - nearPlane) * (i * invSplitNum);
+		float ci = m_lambda * ciLog + (1 - m_lambda) * ciUni;
 
-		m_splitDists.push_back(ci);
+		m_splitsDists[(size_t)i - 1] = ci;
 	}
 }
 
