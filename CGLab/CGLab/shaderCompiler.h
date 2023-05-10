@@ -3,6 +3,7 @@
 
 struct ID3D11Device;
 struct ID3D11VertexShader;
+struct ID3D11GeometryShader;
 struct ID3D11PixelShader;
 struct ID3D10Blob;
 
@@ -18,6 +19,20 @@ public:
 		ID3D11VertexShader** ppVS,
 		ID3D10Blob** ppVSBinaryBlob,
 		ID3D11PixelShader** ppPS,
+		const char* defines = ""
+	);
+
+	bool CreateVertexShader(
+		const char* shaderFileName,
+		ID3D11VertexShader** ppVS,
+		ID3D10Blob** ppVSBinaryBlob,
+		const char* defines = ""
+	);
+
+	bool CreateGeometryShader(
+		const char* shaderFileName,
+		ID3D11GeometryShader** ppGS,
+		ID3D10Blob** ppGSBinaryBlob,
 		const char* defines = ""
 	);
 

@@ -1,6 +1,7 @@
 #pragma once
 
 static constexpr FLOAT PI = 3.14159265359f;
+static constexpr UINT PSSMMaxSplitsNum = 4u;
 
 template <class T>
 void SafeRelease(T*& ptr)

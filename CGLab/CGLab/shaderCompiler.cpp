@@ -10,21 +10,11 @@
 #include "common.h"
 
 
-ShaderCompiler::ShaderCompiler(ID3D11Device* pDevice, bool isDebug)
-	: m_pDevice(pDevice)
-	, m_isDebug(isDebug)
-{}
-
-ShaderCompiler::~ShaderCompiler()
-{}
-
-
-bool ShaderCompiler::CreateVertexAndPixelShaders(
+bool LoadShaderSource(
 	const char* shaderFileName,
-	ID3D11VertexShader** ppVS,
-	ID3D10Blob** ppVSBinaryBlob,
-	ID3D11PixelShader** ppPS,
-	const char* defines
+	bool isDebug,
+	const char* defines,
+	std::string& shaderSource
 )
 {
 	FILE* pFile = nullptr;
@@ -39,7 +29,6 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	size_t fileSize = ftell(pFile);
 	fseek(pFile, 0, SEEK_SET);
 
-	std::string shaderSource;
 	shaderSource.resize(fileSize + 1u);
 
 	fread(shaderSource.data(), fileSize, 1, pFile);
@@ -48,8 +37,8 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 	fclose(pFile);
 
 	ID3DBlob* pErrors = nullptr;
-	
-	UINT flags = m_isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
+
+	UINT flags = isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
 
 	std::string sDefines = defines;
 	std::string addDefines = "";
@@ -74,15 +63,45 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 		const char* definition = sDefines.c_str() + equalPos + 1;
 
 		addDefines.append(std::string("#define ") + defineName + " " + definition + "\n");
-		
+
 		startPos = pos + 1;
 	}
 
 	shaderSource.insert(0, addDefines);
-	fileSize += addDefines.size();
+
+	return true;
+}
+
+
+ShaderCompiler::ShaderCompiler(ID3D11Device* pDevice, bool isDebug)
+	: m_pDevice(pDevice)
+	, m_isDebug(isDebug)
+{}
+
+ShaderCompiler::~ShaderCompiler()
+{}
+
+
+bool ShaderCompiler::CreateVertexAndPixelShaders(
+	const char* shaderFileName,
+	ID3D11VertexShader** ppVS,
+	ID3D10Blob** ppVSBinaryBlob,
+	ID3D11PixelShader** ppPS,
+	const char* defines
+)
+{
+	std::string shaderSource;
+
+	if (!LoadShaderSource(shaderFileName, m_isDebug, defines, shaderSource))
+	{
+		return false;
+	}
+
+	ID3DBlob* pErrors = nullptr;
+	UINT flags = m_isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
 
 	HRESULT hr = D3DCompile(
-		shaderSource.c_str(), fileSize, shaderFileName, nullptr, nullptr,
+		shaderSource.c_str(), shaderSource.size(), shaderFileName, nullptr, nullptr,
 		"VS", "vs_5_0", flags, 0, ppVSBinaryBlob, &pErrors
 	);
 
@@ -107,7 +126,7 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 		ID3DBlob* pBlob = nullptr;
 
 		hr = D3DCompile(
-			shaderSource.c_str(), fileSize, shaderFileName, nullptr, nullptr,
+			shaderSource.c_str(), shaderSource.size(), shaderFileName, nullptr, nullptr,
 			"PS", "ps_5_0", flags, 0, &pBlob, &pErrors
 		);
 
@@ -126,6 +145,90 @@ bool ShaderCompiler::CreateVertexAndPixelShaders(
 		}
 
 		SafeRelease(pBlob);
+	}
+
+	SafeRelease(pErrors);
+
+	return SUCCEEDED(hr);
+}
+
+
+bool ShaderCompiler::CreateVertexShader(
+	const char* shaderFileName,
+	ID3D11VertexShader** ppVS,
+	ID3D10Blob** ppVSBinaryBlob,
+	const char* defines
+)
+{
+	std::string shaderSource;
+
+	if (!LoadShaderSource(shaderFileName, m_isDebug, defines, shaderSource))
+	{
+		return false;
+	}
+
+	ID3DBlob* pErrors = nullptr;
+	UINT flags = m_isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
+
+	HRESULT hr = D3DCompile(
+		shaderSource.c_str(), shaderSource.size(), shaderFileName, nullptr, nullptr,
+		"VS", "vs_5_0", flags, 0, ppVSBinaryBlob, &pErrors
+	);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pDevice->CreateVertexShader(
+			(*ppVSBinaryBlob)->GetBufferPointer(),
+			(*ppVSBinaryBlob)->GetBufferSize(),
+			nullptr,
+			ppVS
+		);
+	}
+	else
+	{
+		OutputDebugStringA((char*)pErrors->GetBufferPointer());
+	}
+
+	SafeRelease(pErrors);
+
+	return SUCCEEDED(hr);
+}
+
+
+bool ShaderCompiler::CreateGeometryShader(
+	const char* shaderFileName,
+	ID3D11GeometryShader** ppGS,
+	ID3D10Blob** ppGSBinaryBlob,
+	const char* defines
+)
+{
+	std::string shaderSource;
+
+	if (!LoadShaderSource(shaderFileName, m_isDebug, defines, shaderSource))
+	{
+		return false;
+	}
+
+	ID3DBlob* pErrors = nullptr;
+	UINT flags = m_isDebug ? D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION : 0;
+
+	HRESULT hr = D3DCompile(
+		shaderSource.c_str(), shaderSource.size(), shaderFileName, nullptr, nullptr,
+		"GS", "gs_5_0", flags, 0, ppGSBinaryBlob, &pErrors
+	);
+
+	if (SUCCEEDED(hr))
+	{
+		hr = m_pDevice->CreateGeometryShader(
+			(*ppGSBinaryBlob)->GetBufferPointer(),
+			(*ppGSBinaryBlob)->GetBufferSize(),
+			nullptr,
+			ppGS
+		);
+	}
+	else
+	{
+		OutputDebugStringA((char*)pErrors->GetBufferPointer());
 	}
 
 	SafeRelease(pErrors);

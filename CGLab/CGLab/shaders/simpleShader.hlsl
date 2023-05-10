@@ -1,4 +1,5 @@
-static const uint MaxLightNum = 3;
+static const uint MaxLightNum = 3u;
+static const uint MaxSplitsNum = 4u;
 
 static const float PI = 3.14159265f;
 
@@ -6,13 +7,24 @@ TextureCube DiffuseIrradianceMap    : register(t0);
 TextureCube EnvMap                  : register(t1);
 Texture2D BRDFLut                   : register(t2);
 
+Texture2DArray ShadowMapArray       : register(t20);
+
 cbuffer ConstantBuffer : register(b0)
 {
     float4x4 modelMatrix;
     float4x4 vpMatrix;
     
     float3 cameraPosition;
+    float3 cameraDirection;
 }
+
+struct DirectionalLight
+{
+    float4 direction;
+    float4 color;
+    
+    float4x4 dirLightVpMatrix[MaxSplitsNum];
+};
 
 struct Light
 {
@@ -23,6 +35,9 @@ struct Light
 
 cbuffer LightBuffer : register(b1)
 {
+    float4 shadowSplitDists;
+    DirectionalLight directionalLight;
+    
     uint4 lightsCount;
     Light lights[MaxLightNum];
 }
@@ -35,8 +50,16 @@ cbuffer PBRParams : register(b2)
     uint4 pbrMode; // r - mode : 1 - Normal Distribution, 2 - Geometry, 3 - Fresnel, Overwise - All
 };
 
-SamplerState MinMagMipLinearSampler     : register(s0);
-SamplerState MinMagLinearSamplerClamp   : register(s1);
+cbuffer DebugBuffer : register(b3)
+{
+    uint4 debugParams; // r - show PSSM splits
+};
+
+
+SamplerState MinMagMipLinearSampler             : register(s0);
+SamplerState MinMagLinearSamplerClamp           : register(s1);
+SamplerState MinMagMipNearestSampler            : register(s2);
+SamplerComparisonState ShadowMapSampler         : register(s3);
 
 
 Texture2D BaseColorTexture          : register(t10);
@@ -81,7 +104,6 @@ VSOut VS(VSIn input)
     output.worldNormal = normalize(mul(float4(input.normal, 0.0f), modelMatrix).xyz);
     
 #if HAS_COLOR_TEXTURE
-    
     output.worldTangent = normalize(mul(input.tangent, modelMatrix).xyz);
     output.texCoord = input.texCoord;
 #endif
@@ -138,7 +160,7 @@ float3 FresnelFunction(float3 dirToView, float3 halfVector, float3 metalF0, floa
 
 float3 BRDF(
     float3 position,
-    float3 lightPosition,
+    float3 dirToLight,
     float3 normal,
     float3 metalF0,
     float roughness,
@@ -146,12 +168,11 @@ float3 BRDF(
 )
 {
     float3 dirToView = normalize(cameraPosition - position);
-    float3 dirToLight = normalize(lightPosition - position);
     float3 halfVector = normalize((dirToView + dirToLight) / 2.0f);
     
     float D = NormalDistributionFunction(normal, halfVector, roughness);
     float3 F = FresnelFunction(dirToView, halfVector, metalF0, metalness);
-    float G = GeometryFunction(normal, dirToView, dirToLight, roughness);
+    float G = clamp(GeometryFunction(normal, dirToView, dirToLight, roughness), 0.0f, 5.0f);
     
     if (pbrMode.r == 1u)
     {
@@ -169,7 +190,49 @@ float3 BRDF(
     float3 Lambert = (1 - F) * metalF0 / PI;
     float3 CookTorrance = (D * F * G) / (4 * dot(dirToLight, normal) * dot(dirToView, normal));
     
-    return Lambert * (1 - metalness) + CookTorrance;
+    return max(Lambert * (1 - metalness) + CookTorrance, float3(0.0f, 0.0f, 0.0f));
+}
+
+float SampleShadowMap(float3 position, out float3 debugSplitsColor)
+{
+    float dist = dot(position - cameraPosition.xyz, cameraDirection);
+    debugSplitsColor = float3(0.0f, 0.0f, 0.0f);
+    
+    uint splitIdx = 0u;
+        
+    if (dist < shadowSplitDists.x)
+    {
+        debugSplitsColor.r += 0.25f;
+        splitIdx = 0u;
+    }
+    else if (dist < shadowSplitDists.y)
+    {
+        debugSplitsColor.g += 0.25f;
+        splitIdx = 1u;
+    }
+    else if (dist < shadowSplitDists.z)
+    {
+        debugSplitsColor.b += 0.25f;
+        splitIdx = 2u;
+    }
+    else
+    {
+        debugSplitsColor.rg += 0.25f;
+        splitIdx = 3u;
+    }
+    
+    float4 lightProjPos = mul(float4(position, 1.0f), directionalLight.dirLightVpMatrix[splitIdx]);
+    float2 texCoord = (lightProjPos.xy / lightProjPos.w) * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+    
+    float shadowDepth = ShadowMapArray.Sample(MinMagMipNearestSampler, float3(texCoord, splitIdx)).r;
+
+    if (lightProjPos.z > shadowDepth)
+    {
+        return 0.0f;
+    }
+    
+    float shadowValue = ShadowMapArray.SampleCmp(ShadowMapSampler, float3(texCoord, splitIdx), lightProjPos.z).r;
+    return shadowValue;
 }
 
 
@@ -195,8 +258,8 @@ PSOut PS(VSOut input)
     rm *= MetalicRoughnessTexture.Sample(MinMagMipLinearSampler, input.texCoord).gb;
 #endif
     
-    float roughness = rm.r;
-    float metalness = rm.g;
+    float roughness = max(rm.r, 0.001f);
+    float metalness = max(rm.g, 0.001f);
     
 #if HAS_EMISSIVE_TEXTURE
     float4 emissive = EmmisiveTexture.Sample(MeshTextureSampler, input.texCoord);
@@ -207,6 +270,32 @@ PSOut PS(VSOut input)
     metalF0 += emissive;
     
     float3 v = normalize(cameraPosition - input.worldPosition.xyz);
+    
+    {
+        float3 dirToLight = -normalize(directionalLight.direction.xyz);
+        float3 lightImpact = directionalLight.color.rgb;
+        lightImpact *= saturate(dot(dirToLight, normal));
+        
+        float3 splitColor = float3(0.0f, 0.0f, 0.0f);
+        float shadowValue = SampleShadowMap(input.worldPosition.xyz, splitColor);
+        
+        if (shadowValue != 0.0f)
+        {
+            resultColor += shadowValue * lightImpact * BRDF(
+                input.worldPosition.xyz,
+                dirToLight,
+                normal,
+                metalF0,
+                roughness,
+                metalness
+            );
+        }
+        
+        if (debugParams.r != 0u)
+        {
+            resultColor += splitColor;
+        }
+    }
     
     for (uint i = 0; i < lightsCount.r; ++i)
     {
@@ -219,7 +308,14 @@ PSOut PS(VSOut input)
         float3 lightInpact = attenuation * lights[i].color.xyz * lights[i].brightnessScaleFactor.r;
         lightInpact *= saturate(dot(dirToLight / lengthToLight, normal));
         
-        resultColor += BRDF(input.worldPosition.xyz, lights[i].position, normal, metalF0, roughness, metalness) * lightInpact;
+        resultColor += lightInpact * BRDF(
+            input.worldPosition.xyz,
+            normalize(dirToLight),
+            normal,
+            metalF0,
+            roughness,
+            metalness
+        );
     }
     
     static const float MAX_REFLECTION_LOD = 4.0f;
@@ -238,6 +334,6 @@ PSOut PS(VSOut input)
     PSOut output = (PSOut)0;
     output.color = float4(resultColor + ambient, 1.0f);
     output.emissive = emissive;
-    
+
     return output;
 }

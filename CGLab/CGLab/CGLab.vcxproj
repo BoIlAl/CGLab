@@ -112,6 +112,7 @@
     <ClInclude Include="renderer.h" />
     <ClInclude Include="rendererContext.h" />
     <ClInclude Include="shaderCompiler.h" />
+    <ClInclude Include="shadowMap.h" />
     <ClInclude Include="stb\stb_image.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="toneMapping.h" />
@@ -137,6 +138,7 @@
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="rendererContext.cpp" />
     <ClCompile Include="shaderCompiler.cpp" />
+    <ClCompile Include="shadowMap.cpp" />
     <ClCompile Include="toneMapping.cpp" />
     <ClCompile Include="WICTextureLoader.cpp" />
   </ItemGroup>
@@ -205,6 +207,11 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\bloom.hlsl">
+      <FileType>Document</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\shadowMap.hlsl">
       <FileType>Document</FileType>
     </None>
   </ItemGroup>

@@ -22,3 +22,34 @@ void PointLight::SetBrightness(FLOAT scaleFactor)
 {
 	m_brightnessScaleFactor = { scaleFactor, 0.0f, 0.0f, 0.0f };
 }
+
+
+DirectionalLight::DirectionalLight(const DirectX::XMFLOAT3& direction, const DirectX::XMFLOAT4 color)
+	: m_direction(direction.x, direction.y, direction.z, 1.0f)
+	, m_color(color)
+{
+	for (UINT i = 0; i < PSSMMaxSplitsNum; ++i)
+	{
+		DirectX::XMStoreFloat4x4(&m_vpMatrix[i], DirectX::XMMatrixIdentity());
+	}
+}
+
+void DirectionalLight::SetDirection(const DirectX::XMFLOAT3& direction)
+{
+	m_direction.x = direction.x;
+	m_direction.y = direction.y;
+	m_direction.z = direction.z;
+	m_direction.w = 1.0f;
+}
+
+void DirectionalLight::SetColor(const DirectX::XMFLOAT4& color)
+{
+	m_color = color;
+}
+
+void DirectionalLight::SetVpMatrix(UINT splitIdx, const DirectX::XMMATRIX& vpMatrix)
+{
+	assert(splitIdx < PSSMMaxSplitsNum);
+
+	DirectX::XMStoreFloat4x4(&m_vpMatrix[splitIdx], vpMatrix);
+}

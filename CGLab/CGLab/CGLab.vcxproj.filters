@@ -111,6 +111,9 @@
     <ClInclude Include="bloom.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="shadowMap.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CGLab.cpp">
@@ -176,6 +179,9 @@
     <ClCompile Include="bloom.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="shadowMap.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="CGLab.rc">
@@ -219,6 +225,9 @@
       <Filter>shaders</Filter>
     </None>
     <None Include="shaders\bloom.hlsl">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="shaders\shadowMap.hlsl">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>
